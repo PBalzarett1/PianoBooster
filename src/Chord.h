@@ -51,17 +51,17 @@ class CNote
 {
 public:
     CNote()
+        : m_part(PB_PART_none),
+          m_pitch(0),
+          m_duration(0)
     {
-        m_part = PB_PART_none;
-        m_pitch = 0;
-        m_duration = 0;
     }
 
     CNote(whichPart_t part, int note, int duration = 0)
+        : m_part(part),
+          m_pitch(note),
+          m_duration(duration)
     {
-        m_part = part;
-        m_pitch = note;
-        m_duration = duration;
     }
 
     static void reset();
@@ -115,6 +115,9 @@ class CChord
 {
 public:
     CChord()
+        : m_deltaTime(0),
+          m_notes(),
+          m_length(0)
     {
         clear();
     }
@@ -186,6 +189,12 @@ class CFindChord
 {
 public:
     CFindChord()
+        : m_noteGapTime(0),
+          m_cordSpanGapTime(0),
+          m_currentChord(),
+          m_completeChord(),
+          m_cfg_ChordNoteGap(0),
+          m_cfg_ChordMaxLength(0)
     {
         reset();
     }

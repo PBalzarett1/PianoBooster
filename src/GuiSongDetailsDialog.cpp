@@ -33,9 +33,6 @@ GuiSongDetailsDialog::GuiSongDetailsDialog(QWidget *parent)
     : QDialog(parent)
 {
     setupUi(this);
-    m_song = nullptr;
-    m_settings = nullptr;
-    m_trackList = nullptr;
     setWindowTitle(tr("Song Details"));
 }
 

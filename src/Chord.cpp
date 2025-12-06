@@ -44,7 +44,7 @@ void CNote::reset()
     CNote::setChannelHands(-2, -2);  // -2 for not set -1 for none
 
     for (int chan = 0; chan < MAX_MIDI_CHANNELS; chan++) {
-        m_rightHandTrack[chan]=-1;
+        m_rightHandTrack[chan] = -1;
     }
 }
 
@@ -202,4 +202,3 @@ bool CFindChord::findChord(CMidiEvent midi, int channel, whichPart_t part)
     }
     return foundChord;
 }
-

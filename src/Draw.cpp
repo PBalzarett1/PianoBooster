@@ -38,8 +38,12 @@ whichPart_t CDraw::m_displayHand;
 int CDraw::m_forceCompileRedraw;
 
 CDraw::CDraw(CSettings* settings)
+    : m_settings(settings),
+      m_scrollProperties(&m_scrollPropertiesHorizontal),
+      m_scrollPropertiesHorizontal(),
+      m_scrollPropertiesVertical()
 #ifndef NO_USE_FTGL
-    :font(nullptr)
+    , font(nullptr)
 #endif
 {
 #ifndef NO_USE_FTGL
@@ -68,10 +72,8 @@ CDraw::CDraw(CSettings* settings)
     }
     font->FaceSize(FONT_SIZE, FONT_SIZE);
 #endif
-    m_settings = settings;
     m_displayHand = PB_PART_both;
     m_forceCompileRedraw = 1;
-    m_scrollProperties = &m_scrollPropertiesHorizontal;
 }
 
 void CDraw::oneLine(float x1, float y1, float x2, float y2)

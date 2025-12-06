@@ -40,6 +40,7 @@
 class CMidiDeviceBase : public QObject
 {
 public:
+    CMidiDeviceBase() = default;
     virtual void init() = 0;
     //! add a midi event to be played immediately
     virtual void playMidiEvent(const CMidiEvent & event) = 0;

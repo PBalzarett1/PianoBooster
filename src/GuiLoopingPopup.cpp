@@ -33,7 +33,6 @@ GuiLoopingPopup::GuiLoopingPopup(QWidget *parent)
     : QWidget(parent)
 {
     setupUi(this);
-    m_song = nullptr;
     setWindowTitle(tr("Continuous Looping"));
     setWindowFlags(Qt::Popup);
 }
@@ -68,4 +67,3 @@ void GuiLoopingPopup::closeEvent(QCloseEvent *event)
     if (parent)
         parent->setChecked(false);
 }
-

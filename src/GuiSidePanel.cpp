@@ -34,13 +34,14 @@
 #include "Conductor.h"
 
 GuiSidePanel::GuiSidePanel(QWidget *parent, CSettings* settings)
-    : QWidget(parent), m_parent(parent)
+    : QWidget(parent),
+      m_song(nullptr),
+      m_score(nullptr),
+      m_trackList(nullptr),
+      m_topBar(nullptr),
+      m_settings(settings),
+      m_parent(parent)
 {
-    m_song = nullptr;
-    m_score = nullptr;
-    m_trackList = nullptr;
-    m_topBar = nullptr;
-    m_settings = settings;
     setupUi(this);
 }
 
@@ -312,4 +313,3 @@ void GuiSidePanel::on_rhythmTappingCombo_activated (int index)
     }
     autoSetMuteYourPart();
 }
-

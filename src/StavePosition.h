@@ -52,9 +52,11 @@ public:
     ////////////////////////////////////////////////////////////////////////////////
     //! @brief The default constructor.
     CStavePos()
+        : m_staveIndex(0),
+          m_accidental(0),
+          m_offsetY(0),
+          m_hand(PB_PART_none)
     {
-        m_staveIndex = 0;
-        m_accidental = 0;
         setHand(PB_PART_none);
     };
 
@@ -64,9 +66,11 @@ public:
     //! @param index        the save index number: 0 central line, 5 = top line, -5 the bottom line.
     //! @param accidental   Indicates an accidental 0 = none, 1=sharp, -1 =flat.
     CStavePos(whichPart_t hand, int index, int accidental = 0)
+        : m_staveIndex(index),
+          m_accidental(accidental),
+          m_offsetY(0),
+          m_hand(PB_PART_none)
     {
-        m_staveIndex = index;
-        m_accidental = accidental;
         setHand(hand);
     };
 

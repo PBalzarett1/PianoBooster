@@ -35,6 +35,26 @@
 #define NOTE_AHEAD_GAP          22 // the notes on the left hand side of the score
 #define NOTE_BEHIND_GAP         14
 
+CScroll::CScroll(int id, CSettings* settings)
+    : CDraw(settings),
+      m_id(id),
+      m_notation(new CNotation()),
+      m_deltaHead(0),
+      m_deltaTail(0),
+      m_symbolID(0),
+      m_headSlot(),
+      m_transpose(0),
+      m_wantedIndex(0),
+      m_wantedDelta(0),
+    m_scrollQueue(new CQueue<CSlotDisplayList>(QUEUE_LENGTH)),
+    m_show(false),
+    m_noteSpacingFactor(1.0f),
+    m_ppqnFactor(1.0f)
+{
+    reset();
+    (void)m_id; // suppress unused private field warning
+}
+
 void CScroll::compileSlot(CSlotDisplayList info)
 {
 
@@ -243,11 +263,10 @@ void CScroll::setPlayedNoteColor(int note, CColor color, qint64 wantedDelta, qin
 
 void CScroll::refresh()
 {
-    int i;
     if (m_show == false)
         return;
 
-    for ( i = 0; i < m_scrollQueue->length(); i++)
+    for (int i = 0; i < m_scrollQueue->length(); i++)
         compileSlot(m_scrollQueue->index(i));
 }
 
@@ -312,7 +331,6 @@ void CScroll::transpose(int transpose)
 
 void CScroll::showScroll(bool show)
 {
-    int i;
     GLuint nextListId = 0;
 
     m_show = show;
@@ -323,7 +341,7 @@ void CScroll::showScroll(bool show)
             m_symbolID = glGenLists (1);
 
         // add in the missing GL display list
-        for ( i = 0; i < m_scrollQueue->length(); i++)
+        for (int i = 0; i < m_scrollQueue->length(); i++)
         {
             //assert (m_scrollQueue->indexPtr(i)->m_displayListId == 0);
             nextListId = glGenLists (1);
@@ -333,7 +351,7 @@ void CScroll::showScroll(bool show)
 
         }
         // And now compile the slot (remember that each slot points to the next one)
-        for ( i = 0; i < m_scrollQueue->length(); i++)
+        for (int i = 0; i < m_scrollQueue->length(); i++)
         {
             compileSlot(m_scrollQueue->index(i));
         }
@@ -341,7 +359,7 @@ void CScroll::showScroll(bool show)
     else
     {
         // Remove all the gl items
-        for ( i = 0; i < m_scrollQueue->length(); i++)
+        for (int i = 0; i < m_scrollQueue->length(); i++)
         {
             if (m_scrollQueue->indexPtr(i)->m_displayListId != 0 && m_scrollQueue->indexPtr(i)->m_displayListId != nextListId)
                 glDeleteLists(m_scrollQueue->index(i).m_displayListId, 1);
@@ -368,13 +386,12 @@ CScroll::CSlotDisplayList::CSlotDisplayList(const CSlot& slot, GLuint displayLis
 
 void CScroll::reset()
 {
-    int i;
     m_wantedIndex = 0;
     m_wantedDelta = 0;
     m_deltaHead = m_deltaTail = 0;
     m_notation->reset();
     m_headSlot.clear();
-    for ( i = 0; i < m_scrollQueue->length(); i++)
+    for (int i = 0; i < m_scrollQueue->length(); i++)
     {
         if (m_scrollQueue->index(i).m_displayListId)
             glDeleteLists(m_scrollQueue->index(i).m_displayListId, 1);

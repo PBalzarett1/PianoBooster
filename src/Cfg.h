@@ -48,14 +48,13 @@
 class CColor
 {
 public:
-    CColor() { red = green = blue = 0; }
+    CColor() : red(0), green(0), blue(0) {}
 
     CColor(double r, double g, double b)
-    {
-        red = static_cast<float>(r);
-        green = static_cast<float>(g);
-        blue = static_cast<float>(b);
-    }
+        : red(static_cast<float>(r)),
+          green(static_cast<float>(g)),
+          blue(static_cast<float>(b))
+    {}
     float red, green, blue;
 
     bool operator==(CColor color)

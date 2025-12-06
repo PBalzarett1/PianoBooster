@@ -51,8 +51,16 @@ class CPiano : protected CDraw
 {
 
 public:
-    CPiano(CSettings* settings) : CDraw(settings)
+    CPiano(CSettings* settings)
+        : CDraw(settings),
+          m_noteNameList(),
+          m_savedChordLookUp(),
+          m_noteNameListLength(0),
+          m_goodChord(),
+          m_badChord(),
+          m_rhythmTapping(false)
     {
+        clear();
     }
 
     void drawPianoInput();

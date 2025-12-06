@@ -40,19 +40,7 @@ class CSettings;
 class CScroll : public CDraw
 {
 public:
-    CScroll(int id, CSettings* settings) : CDraw(settings)
-    {
-        m_id = id;
-        m_symbolID = 0;
-
-        m_notation = new CNotation();
-        m_scrollQueue = new CQueue<CSlotDisplayList>(QUEUE_LENGTH);
-        reset();
-        m_show = false;
-        m_noteSpacingFactor = 1.0;
-        m_ppqnFactor = 1.0;
-        m_transpose = 0;
-    }
+    CScroll(int id, CSettings* settings);
 
     ~CScroll()
     {

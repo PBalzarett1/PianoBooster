@@ -250,8 +250,8 @@ void benchMarkInit()
     s_previousTime = 0;
     s_previousFrameTime = 0;
 
-    for (int i=0; i <  arraySize( s_benchData ); i++)
-        benchMarkReset(&s_benchData[i]);
+    for (auto &bench : s_benchData)
+        benchMarkReset(&bench);
     benchMarkReset(&s_frameRate);
     s_frameRate.msg = " *** Frame Rate ***";
 }
@@ -303,7 +303,7 @@ void benchMarkResults()
     if ( (ticks - s_previousFrameTime) < 5000)
         return;
     s_previousFrameTime = ticks;
-    for (int i=0; i <  arraySize(s_benchData); i++)
+    for (int i = 0; i < arraySize(s_benchData); i++)
     {
         printResult(i, &s_benchData[i]);
     }

@@ -43,6 +43,12 @@ class CSlot
 {
 public:
     CSlot()
+        : m_deltaTime(0),
+          m_symbols(),
+          m_length(0),
+          m_av8Left(0),
+          m_av8Right(0),
+          m_maxLeftEdge(0)
     {
         clear();
     }
@@ -133,15 +139,18 @@ class CNoteState
 {
 public:
     CNoteState()
+        : m_barChangeCounter(-1),
+          m_accidentalState(PB_ACCIDENTAL_MODIFER_noChange),
+          m_noteLength(0),
+          m_backLink(nullptr)
     {
-        clear();
     }
     void clear()
     {
         m_barChangeCounter = -1;
         m_accidentalState = PB_ACCIDENTAL_MODIFER_noChange;
         m_noteLength = 0;
-        m_backLink = 0;
+        m_backLink = nullptr;
     }
     void setBarChange(int value){m_barChangeCounter = value;}
     int getBarChange(){return m_barChangeCounter;}
@@ -173,11 +182,11 @@ class CNotation
 {
 public:
     CNotation()
+        : m_slotQueue(new CQueue<CSlot>(200)),
+          m_midiInputQueue(new CQueue<CMidiEvent>(1000)),
+          m_displayChannel(0)
     {
-        m_midiInputQueue = new CQueue<CMidiEvent>(1000);
-        m_slotQueue = new CQueue<CSlot>(200);
         reset();
-        m_displayChannel = 0;
     }
     ~CNotation()
     {
@@ -223,4 +232,3 @@ private:
 };
 
 #endif  // __NOTATION_H__
-

@@ -59,10 +59,7 @@ class CSlot;
 class CScrollProperties
 {
 public:
-    CScrollProperties()
-    {
-        m_horizontal = false;
-    }
+    CScrollProperties() : m_horizontal(false) {}
     bool horizontal() { return m_horizontal; }
 private:
     bool m_horizontal;
