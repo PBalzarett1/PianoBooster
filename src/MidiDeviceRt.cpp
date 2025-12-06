@@ -46,31 +46,28 @@ CMidiDeviceRt::~CMidiDeviceRt() = default;
 
 void CMidiDeviceRt::init()
 {
-    if (!m_midiin || !m_midiout) {
-        m_midiPorts[0] = -1;
-        m_midiPorts[1] = -1;
-        m_rawDataIndex = 0;
-        if (m_midiout) {
-            m_midiout.reset();
-        }
-        try {
-            m_midiout.reset(new RtMidiOut());
-        }
-        catch(RtMidiError &error){
-            error.printMessage();
-            return;
-        }
+    if (m_midiin && m_midiout) {
+        return;
+    }
 
-        if (m_midiin) {
-            m_midiin.reset();
-        }
-        try {
-            m_midiin.reset(new RtMidiIn());
-        }
-        catch(RtMidiError &error){
-            error.printMessage();
-            return;
-        }
+    m_midiPorts[0] = -1;
+    m_midiPorts[1] = -1;
+    m_rawDataIndex = 0;
+
+    try {
+        m_midiout = std::make_unique<RtMidiOut>();
+    }
+    catch(RtMidiError &error){
+        error.printMessage();
+        return;
+    }
+
+    try {
+        m_midiin = std::make_unique<RtMidiIn>();
+    }
+    catch(RtMidiError &error){
+        error.printMessage();
+        return;
     }
 }
 

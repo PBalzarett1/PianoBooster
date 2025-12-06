@@ -33,14 +33,14 @@
 #endif
 
 CMidiDevice::CMidiDevice()
-    : m_rtMidiDevice(std::unique_ptr<CMidiDeviceRt>(new CMidiDeviceRt()))
-{
+    : m_rtMidiDevice(std::make_unique<CMidiDeviceRt>())
 #if WITH_INTERNAL_FLUIDSYNTH
-    m_fluidSynthMidiDevice = std::unique_ptr<CMidiDeviceFluidSynth>(new CMidiDeviceFluidSynth());
+    , m_fluidSynthMidiDevice(std::make_unique<CMidiDeviceFluidSynth>())
 #endif
-    m_selectedMidiInputDevice = m_rtMidiDevice.get();
-    m_selectedMidiOutputDevice = m_rtMidiDevice.get();
-    m_validOutput = false;
+    , m_selectedMidiInputDevice(m_rtMidiDevice.get())
+    , m_selectedMidiOutputDevice(m_rtMidiDevice.get())
+    , m_validOutput(false)
+{
 }
 
 CMidiDevice::~CMidiDevice()
