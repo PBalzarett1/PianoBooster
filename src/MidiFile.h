@@ -59,6 +59,7 @@ public:
     void setLogLevel(int level){CMidiTrack::setLogLevel(level);}
     midiErrors_t getMidiError() { return m_midiError;}
     int numberOfTracks() const {return m_numberOfTracks;}
+    QString getTrackName(int index) const;
     
 private:
     bool checkMidiEventFromStream(int streamIdx);

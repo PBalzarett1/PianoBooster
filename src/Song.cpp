@@ -101,6 +101,8 @@ void CSong::loadSong(const QString & filename)
 void CSong::midiFileInfo()
 {
     m_trackList->reset(m_midiFile->numberOfTracks());
+    for (int i = 0; i < m_midiFile->numberOfTracks(); ++i)
+        m_trackList->setTrackName(i, m_midiFile->getTrackName(i));
     setTimeSig(0,0);
     CStavePos::setKeySignature( NOT_USED, 0 );
 

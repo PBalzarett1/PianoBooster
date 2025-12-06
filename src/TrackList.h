@@ -144,15 +144,21 @@ private:
 class CTrackListItem
 {
 public:
-    CTrackListItem(int midiChannel) :
-    m_midiChannel(midiChannel)
+    CTrackListItem(int midiChannel, int trackIndex = -1, const QString &trackName = QString()) :
+    m_midiChannel(midiChannel),
+    m_trackIndex(trackIndex),
+    m_trackName(trackName)
     {
     }
 
     int midiChannel() const {return m_midiChannel;}
+    int trackIndex() const {return m_trackIndex;}
+    QString trackName() const {return m_trackName;}
 
 private:
     int m_midiChannel;
+    int m_trackIndex;
+    QString m_trackName;
 };
 
 class CTrackList : public QObject
@@ -196,6 +202,9 @@ public:
 
     void changeListWidgetItemView(int index, QListWidgetItem* listWidgetItem);
     bool isChannelActive(int chan) const;
+    void setTrackName(int trackIndex, const QString &name);
+    QString trackName(int trackIndex) const;
+    int channelTrackIndex(int channel) const;
 
     double averageNotePitch(int chan) {
         int totalNoteCount = 0;
@@ -217,6 +226,8 @@ private:
     QList<CTrackListItem> m_partsList;
     QVector<AnalyseItem> m_midiChannels;
     int m_noteFrequency[MAX_MIDI_CHANNELS][MAX_MIDI_NOTES];
+    QVector<QString> m_trackNames;
+    int m_channelTrackIndex[MAX_MIDI_CHANNELS];
 
 };
 

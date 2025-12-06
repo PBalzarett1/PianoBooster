@@ -152,6 +152,15 @@ void CMidiFile::rewind()
     initMergedEvents();
 }
 
+QString CMidiFile::getTrackName(int index) const
+{
+    if (index < 0 || index >= m_numberOfTracks)
+        return QString();
+    if (m_tracks[index])
+        return m_tracks[index]->getTrackName();
+    return QString();
+}
+
 bool CMidiFile::checkMidiEventFromStream(int streamIdx)
 {
     if (streamIdx < 0 || streamIdx >= MAX_TRACKS)

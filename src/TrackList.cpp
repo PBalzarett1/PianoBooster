@@ -44,6 +44,9 @@ void CTrackList::reset(int numberOfTracks)
 {
     m_partsList.clear();
     m_midiChannels.clear();
+    m_trackNames = QVector<QString>(numberOfTracks);
+    for (int chan = 0; chan < MAX_MIDI_CHANNELS; ++chan)
+        m_channelTrackIndex[chan] = -1;
     for (int chan = 0; chan < MAX_MIDI_CHANNELS; ++chan) {
         std::fill_n(m_noteFrequency[chan], MAX_MIDI_NOTES, 0);
         m_midiChannels.append(AnalyseItem(numberOfTracks));
@@ -61,10 +64,13 @@ void CTrackList::currentRowChanged(int currentRow)
 void CTrackList::examineMidiEvent(CMidiEvent event)
 {
     int chan = event.channel();
+    int trackIdx = event.track();
 
     assert(chan < MAX_MIDI_CHANNELS && chan >= 0);
     if (chan < MAX_MIDI_CHANNELS && chan >= 0)
     {
+        if (trackIdx >= 0 && trackIdx < m_trackNames.size() && m_channelTrackIndex[chan] == -1)
+            m_channelTrackIndex[chan] = trackIdx;
         if (event.type() == MIDI_NOTE_ON)
         {
             m_midiChannels[chan].addNoteEvent(event);
@@ -228,7 +234,9 @@ void CTrackList::refresh()
     {
         if (isChannelActive(chan))
         {
-            m_partsList.append(CTrackListItem(chan));
+            int trackIdx = channelTrackIndex(chan);
+            QString name = trackName(trackIdx);
+            m_partsList.append(CTrackListItem(chan, trackIdx, name));
         }
     }
 
@@ -309,6 +317,7 @@ QStringList CTrackList::getAllChannelProgramNames(bool raw)
     {
         hand.clear();
         const int chan = part.midiChannel();
+        const QString trackName = part.trackName();
         if (raw == false)
         {
             if (CNote::leftHandChan() == chan)
@@ -316,7 +325,10 @@ QStringList CTrackList::getAllChannelProgramNames(bool raw)
             if (CNote::rightHandChan() == chan)
                 hand += QObject::tr("R");
         }
-        const QString text = QString::number(chan+1) + hand + " " + getChannelProgramName(chan);
+        QString label = QString::number(chan+1) + hand;
+        if (!trackName.isEmpty())
+            label = trackName + " (" + label + ")";
+        const QString text = label + " " + getChannelProgramName(chan);
         items += text;
     }
     return items;
@@ -546,4 +558,25 @@ QString CTrackList::getProgramName(int program)
         return tr(gmInstrumentNames[program]);
     else
         return QString();
+}
+
+void CTrackList::setTrackName(int trackIndex, const QString &name)
+{
+    if (trackIndex < 0 || trackIndex >= m_trackNames.size())
+        return;
+    m_trackNames[trackIndex] = name;
+}
+
+QString CTrackList::trackName(int trackIndex) const
+{
+    if (trackIndex < 0 || trackIndex >= m_trackNames.size())
+        return QString();
+    return m_trackNames[trackIndex];
+}
+
+int CTrackList::channelTrackIndex(int channel) const
+{
+    if (channel < 0 || channel >= MAX_MIDI_CHANNELS)
+        return -1;
+    return m_channelTrackIndex[channel];
 }
