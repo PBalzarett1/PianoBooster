@@ -40,8 +40,11 @@ class CTempo
 {
 public:
     CTempo()
+        : m_userSpeed(0.0f),
+          m_midiTempo(0.0f),
+          m_jumpAheadDelta(0),
+          m_savedWantedChord(nullptr)
     {
-        m_savedWantedChord = 0;
         reset();
     }
     void setSavedWantedChord(CChord * savedWantedChord) { m_savedWantedChord = savedWantedChord; }
@@ -109,4 +112,3 @@ private:
 };
 
 #endif  // __TEMPO_H__
-

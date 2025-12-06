@@ -41,28 +41,59 @@
 playMode_t CConductor::m_playMode = PB_PLAY_MODE_listen;
 
 CConductor::CConductor()
+    : m_scoreWin(nullptr),
+      m_settings(nullptr),
+      m_songEventQueue(new CQueue<CMidiEvent>(1000)),
+      m_wantedChordQueue(new CQueue<CChord>(1000)),
+      m_realTimeEventBits(0),
+      m_playingDeltaTime(0),
+      m_chordDeltaTime(0),
+      m_playing(false),
+      m_transpose(0),
+      m_followState(PB_FOLLOW_searching),
+      m_rating(),
+      m_savedNoteQueue(new CQueue<CMidiEvent>(200)),
+      m_savedNoteOffQueue(new CQueue<CMidiEvent>(200)),
+      m_nextMidiEvent(),
+      m_piano(nullptr),
+      m_bar(),
+      m_leadLagAdjust(0),
+      m_silenceTimeOut(0),
+      m_wantedChord(),
+      m_savedWantedChord(),
+      m_goodPlayedNotes(),
+      m_tempo(),
+      m_KeyboardLightsOn(false),
+      m_pianistSplitPoint(0),
+      m_followSkillAdvanced(false),
+      m_lastSound(-1),
+      m_stopPoint(0),
+      m_cfg_rightNoteSound(0),
+      m_cfg_wrongNoteSound(0),
+      m_pianistGoodChan(0),
+      m_pianistBadChan(0),
+      m_cfg_earlyNotesPoint(0),
+      m_cfg_stopPointAdvanced(0),
+      m_cfg_stopPointBeginner(0),
+      m_cfg_imminentNotesOffPoint(0),
+      m_cfg_playZoneEarly(0),
+      m_cfg_playZoneLate(0),
+      m_cfg_rhythmTapLeftHandDrumSound(0),
+      m_cfg_rhythmTapRightHandDrumSound(0),
+      m_pianistTiming(0),
+      m_followPlayingTimeOut(false),
+      m_testWrongNoteSound(false),
+      m_boostVolume(0),
+      m_pianoVolume(0),
+      m_activeChannel(0),
+      m_savedMainVolume(),
+      m_skill(0),
+      m_mutePianistPart(false),
+      m_latencyFix(0),
+      m_track2ChannelLookUp()
 {
-    m_scoreWin = nullptr;
-    m_settings = nullptr;
-    m_piano = nullptr;
-
-    m_songEventQueue = new CQueue<CMidiEvent>(1000);
-    m_wantedChordQueue = new CQueue<CChord>(1000);
-    m_savedNoteQueue = new CQueue<CMidiEvent>(200);
-    m_savedNoteOffQueue = new CQueue<CMidiEvent>(200);
-    m_playing = false;
-    m_transpose = 0;
-    m_latencyFix = 0;
-    m_leadLagAdjust = 0;
     setSpeed(1.0);
     setLatencyFix(0);
-    m_boostVolume = 0;
-    m_pianoVolume = 0;
-    m_activeChannel = 0;
-    m_skill = 0;
-    m_silenceTimeOut = 0;
-    m_realTimeEventBits = 0;
-    m_mutePianistPart = false;
     setPianistChannels(1-1,2-1);
     cfg_timingMarkersFlag = false;
     cfg_stopPointMode = PB_STOP_POINT_MODE_automatic;
@@ -88,8 +119,12 @@ CConductor::~CConductor()
 
 void CConductor::reset()
 {
-    int i;
-    for ( i = 0; i < MAX_MIDI_TRACKS; i++)
+    resetTrackChannelMap();
+}
+
+void CConductor::resetTrackChannelMap()
+{
+    for (int i = 0; i < MAX_MIDI_TRACKS; i++)
     {
         mapTrack2Channel(i,   i);
         if (i >= MAX_MIDI_CHANNELS)
@@ -127,9 +162,7 @@ void CConductor::channelSoundOff(int channel)
 
 void CConductor::allSoundOff()
 {
-    int channel;
-
-    for ( channel = 0; channel < MAX_MIDI_CHANNELS; channel++)
+    for (int channel = 0; channel < MAX_MIDI_CHANNELS; channel++)
     {
         if (channel != m_pianistGoodChan)
             channelSoundOff(channel);
@@ -140,10 +173,8 @@ void CConductor::allSoundOff()
 
 void CConductor::resetAllChannels()
 {
-    int channel;
-
     CMidiEvent midi;
-    for ( channel = 0; channel < MAX_MIDI_CHANNELS; channel++)
+    for (int channel = 0; channel < MAX_MIDI_CHANNELS; channel++)
     {
         midi.controlChangeEvent(0, channel, MIDI_RESET_ALL_CONTROLLERS, 0);
         playMidiEvent(midi);
@@ -214,9 +245,7 @@ int CConductor::calcBoostVolume(int channel, int volume)
 /* send boost volume by adjusting all channels */
 void CConductor::outputBoostVolume()
 {
-    int chan;
-
-    for ( chan =0; chan <MAX_MIDI_CHANNELS; chan++ )
+    for (int chan = 0; chan < MAX_MIDI_CHANNELS; chan++ )
     {
         if (hasPianistKeyboardChannel(chan))
             continue;
@@ -447,12 +476,11 @@ void CConductor::findSplitPoint()
     // find the split point
     int lowestTreble = MIDDLE_C + 37;
     int highestBase =  MIDDLE_C - 37;
-    CNote note;
 
     // Find where to put the split point
     for(int i = 0; i < m_wantedChord.length(); i++)
     {
-        note = m_wantedChord.getNote(i);
+        CNote note = m_wantedChord.getNote(i);
         if (note.part() == PB_PART_right && note.pitch() < lowestTreble)
             lowestTreble = note.pitch();
         if (note.part() == PB_PART_left && note.pitch() > highestBase)
@@ -465,8 +493,6 @@ void CConductor::findSplitPoint()
 
 void CConductor::turnOnKeyboardLights(bool on)
 {
-    int note;
-    int i;
     CMidiEvent event;
 
     // exit if not enable
@@ -478,9 +504,9 @@ void CConductor::turnOnKeyboardLights(bool on)
         return;
 
     m_KeyboardLightsOn = on;
-    for(i = 0; i < m_wantedChord.length(); i++)
+    for(int i = 0; i < m_wantedChord.length(); i++)
     {
-        note = m_wantedChord.getNote(i).pitch();
+        int note = m_wantedChord.getNote(i).pitch();
         if (on == true)
             event.noteOnEvent(0, Cfg::keyboardLightsChan, note, 1);
         else
@@ -527,10 +553,9 @@ bool CConductor::validatePianistNote( const CMidiEvent & inputNote)
 
 void CConductor::playWantedChord (CChord chord, CMidiEvent inputNote)
 {
-    int pitch;
     for(int i = 0; i < chord.length(); i++)
     {
-        pitch = chord.getNote(i).pitch();
+        int pitch = chord.getNote(i).pitch();
         inputNote.setNote(pitch);
         playTrackEvent(inputNote);
     }
@@ -818,7 +843,7 @@ void CConductor::addDeltaTime(qint64 ticks)
 {
     m_scoreWin->scrollDeltaTime(ticks);
     m_playingDeltaTime += ticks;
-    m_chordDeltaTime +=ticks;
+    m_chordDeltaTime += ticks;
 }
 
 void CConductor::followPlaying()
@@ -889,11 +914,9 @@ void CConductor::findImminentNotesOff()
 
 void CConductor::missedNotesColor(CColor color)
 {
-    int i;
-    CNote note;
-    for (i = 0; i < m_wantedChord.length(); i++)
+    for (int i = 0; i < m_wantedChord.length(); i++)
     {
-        note = m_wantedChord.getNote(i);
+        CNote note = m_wantedChord.getNote(i);
         if (m_goodPlayedNotes.searchChord(note.pitch(),m_transpose) == false)
             m_scoreWin->setPlayedNoteColor(note.pitch() + m_transpose, color, m_chordDeltaTime);
     }
@@ -1043,9 +1066,7 @@ void CConductor::realTimeEngine(qint64 mSecTicks)
 
 void CConductor::rewind()
 {
-    int chan;
-
-    for ( chan = 0; chan < MAX_MIDI_CHANNELS; chan++)
+    for (int chan = 0; chan < MAX_MIDI_CHANNELS; chan++)
     {
         m_savedMainVolume[chan] = 100;
     }

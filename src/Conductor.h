@@ -249,6 +249,7 @@ private:
 
     void addDeltaTime(qint64 ticks);
     void turnOnKeyboardLights(bool on);
+    void resetTrackChannelMap();
 
     qint64 m_playingDeltaTime;
     qint64 m_chordDeltaTime;
