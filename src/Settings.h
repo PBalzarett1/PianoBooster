@@ -136,6 +136,10 @@ public:
     {
         setValue("FluidSynth/SoundFont", getFluidSoundFontNames());
     }
+    double getHighScoreForSong(const QString &songId) const;
+    void updateHighScoreForSong(const QString &songId, double score);
+    quint16 getStarsForSong(const QString &songId) const;
+    void updateStarsForSong(const QString &songId, quint16 starMask);
 
     // has a new sound font been entered that is not the same as the old sound font
     bool isNewSoundFontEntered()

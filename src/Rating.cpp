@@ -41,6 +41,19 @@ void CRating::reset()
     m_goodAccuracyFlag = false;
 }
 
+const int CRating::m_starThresholds[10] = {50, 60, 70, 80, 85, 90, 92, 94, 96, 98};
+
+quint16 CRating::starMaskForScore(double percent)
+{
+    quint16 mask = 0;
+    for (int i = 0; i < 10; ++i)
+    {
+        if (percent >= m_starThresholds[i])
+            mask |= (1u << i);
+    }
+    return mask;
+}
+
 void CRating::calculateAccuracy()
 {
     int direction = 0;

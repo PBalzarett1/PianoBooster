@@ -48,6 +48,7 @@
 #include "GuiSidePanel.h"
 #include "QtWindow.h"
 #include "version.h"
+#include <QDateTime>
 
 #if WITH_INTERNAL_FLUIDSYNTH
 #include "MidiDeviceFluidSynth.h"
@@ -122,6 +123,46 @@ void CSettings::setCourtesyAccidentals(bool value) {
 void CSettings::setFollowThroughErrorsEnabled(bool value) {
     m_followThroughErrorsEnabled = value;
     setValue(QStringLiteral("Score/FollowThroughErrors"), value );
+}
+
+double CSettings::getHighScoreForSong(const QString &songId) const
+{
+    if (songId.isEmpty())
+        return -1.0;
+    return value(QStringLiteral("HighScores/%1/score").arg(songId), -1.0).toDouble();
+}
+
+void CSettings::updateHighScoreForSong(const QString &songId, double score)
+{
+    if (songId.isEmpty())
+        return;
+
+    const double currentBest = getHighScoreForSong(songId);
+    if (score <= currentBest)
+        return;
+
+    setValue(QStringLiteral("HighScores/%1/score").arg(songId), score);
+    setValue(QStringLiteral("HighScores/%1/timestamp").arg(songId), QDateTime::currentDateTime());
+}
+
+quint16 CSettings::getStarsForSong(const QString &songId) const
+{
+    if (songId.isEmpty())
+        return 0;
+    return static_cast<quint16>(value(QStringLiteral("HighScores/%1/stars").arg(songId), 0).toUInt());
+}
+
+void CSettings::updateStarsForSong(const QString &songId, quint16 starMask)
+{
+    if (songId.isEmpty() || starMask == 0)
+        return;
+
+    const quint16 currentMask = getStarsForSong(songId);
+    const quint16 newMask = currentMask | starMask;
+    if (newMask == currentMask)
+        return;
+    setValue(QStringLiteral("HighScores/%1/stars").arg(songId), newMask);
+    setValue(QStringLiteral("HighScores/%1/timestamp").arg(songId), QDateTime::currentDateTime());
 }
 
 void CSettings::setOneFingerPlay(bool enabled) {

@@ -36,6 +36,7 @@
 #include "GuiTopBar.h"
 #include "Score.h"
 #include "Settings.h"
+#include "Rating.h"
 
 #include <QAction>
 #include <QApplication>
@@ -133,6 +134,7 @@ QtWindow::QtWindow()
     if (Cfg::experimentalSwapInterval != -1)
     {
         fmt.setSwapInterval(Cfg::experimentalSwapInterval);
+        fmt.setSwapBehavior(QSurfaceFormat::DoubleBuffer);
         int value = fmt.swapInterval();
         ppLogInfo("Open GL Swap Interval %d", value);
     }
@@ -226,6 +228,13 @@ void QtWindow::songEventUpdated(eventBits_t eventBits)
     m_topBar->updateTempoDisplay();
 
     if ((eventBits & EVENT_BITS_playingStopped) != 0) {
+        if (m_song && m_settings) {
+            double score = m_song->getRating()->ratingPercent();
+            const QString songId = m_settings->getCurrentSongLongFileName();
+            m_settings->updateHighScoreForSong(songId, score);
+            const quint16 stars = CRating::starMaskForScore(score);
+            m_settings->updateStarsForSong(songId, stars);
+        }
         if (m_sidePanel->isRepeatSong()) {
             m_topBar->on_playFromStartButton_clicked(true);
         } else {

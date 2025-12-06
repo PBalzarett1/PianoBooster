@@ -83,6 +83,7 @@ private:
     CScore* m_score;
     QBasicTimer m_timer;
     QElapsedTimer m_realtime;
+    int m_idealTickMs = 0;
     qint64 m_displayUpdateTicks;
     CRating* m_rating;
     QFont m_timeSigFont;
@@ -95,6 +96,7 @@ private:
     int m_titleHeight;
     eventBits_t m_eventBits;
     bool m_allowedTimerEvent;
+    QString m_cachedStarsText;
 };
 
 #endif // __GLVIEW_H__

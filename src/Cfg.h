@@ -110,8 +110,9 @@ public:
     #ifdef _WIN32
          tickRate = 12;
     #else
-          tickRate = 4; // was 12
+          tickRate = 2; // was 12
     #endif
+         experimentalSwapInterval = 1; // request vsync by default
     }
 
     static void setStaveEndX(float x)

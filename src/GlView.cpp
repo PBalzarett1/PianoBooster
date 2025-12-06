@@ -40,12 +40,13 @@
 #include "Draw.h"
 
 // This defines the PB Open GL frame per seconds.
-// Try to make sure this runs a bit faster than the screen refresh rate of 60z (or 16.6 msec)
-#define SCREEN_FRAME_RATE 12 // That 12 msec or 83.3 frames per second
+// Try to make sure this runs near the screen refresh rate of 60hz (or ~16.6 msec)
+#define SCREEN_FRAME_RATE 16 // target about 60 frames per second
 
 #define REDRAW_COUNT ((m_cfg_openGlOptimise >= 2) ? 1 : 2) // there are two gl buffers but redrawing once is best (set 2 with buggy gl drivers)
 
 #define TEXT_LEFT_MARGIN 30
+static const int ACCURACY_BAR_WIDTH = 360;
 
 CGLView::CGLView(QtWindow* parent, CSettings* settings)
     : QOpenGLWidget(parent)
@@ -182,7 +183,7 @@ void CGLView::drawAccurracyBar()
 
     float y = static_cast<float>(Cfg::getAppHeight() - 14);
     const float x = static_cast<float>(accuracyBarStart);
-    const int width = 360;
+    const int width = ACCURACY_BAR_WIDTH;
     const int lineWidth = 8/2;
 
     m_rating->calculateAccuracy();
@@ -234,6 +235,29 @@ void CGLView::drawDisplayText()
        }
 
         renderText(TEXT_LEFT_MARGIN, y-4,0 ,accuracyText, m_timeRatingFont);
+
+        const double currentRating = m_rating->ratingPercent();
+        QString currentText = tr("%1%").arg(currentRating, 0, 'f', 1);
+        renderText(accuracyBarStart + ACCURACY_BAR_WIDTH + 10, y-4, 0, currentText, m_timeRatingFont);
+
+        const double bestRating = m_settings->getHighScoreForSong(m_settings->getCurrentSongLongFileName());
+        if (bestRating >= 0.0) {
+            QString bestText = tr("Best: %1%").arg(bestRating, 0, 'f', 1);
+            QFontMetrics fm(m_timeRatingFont);
+            const int bestX = Cfg::getAppWidth() - fm.boundingRect(bestText).width() - TEXT_LEFT_MARGIN;
+            renderText(bestX, y-4, 0, bestText, m_timeRatingFont);
+        }
+
+        // Stars: show simple collected vs missing using * and . under the Best text, right aligned
+        const quint16 starMask = m_settings->getStarsForSong(m_settings->getCurrentSongLongFileName());
+        QString starText;
+        starText.reserve(12);
+        for (int i = 0; i < 10; ++i)
+            starText.append((starMask & (1u << i)) ? '*' : '.');
+        QFontMetrics fmStars(m_timeRatingFont);
+        const int starX = Cfg::getAppWidth() - fmStars.boundingRect(starText).width() - TEXT_LEFT_MARGIN;
+        const int starY = y - 4 - fmStars.height() - 2;
+        renderText(starX, starY, 0, starText, m_timeRatingFont);
     }
 
     if (m_titleHeight < 45 )
@@ -367,8 +391,8 @@ void CGLView::initializeGL()
     m_song->regenerateChordQueue();
 
     // increased the tick time for MIDI handling
-
-    m_timer.start(Cfg::tickRate, this );
+    m_idealTickMs = qMax(1, Cfg::tickRate);
+    m_timer.start(Cfg::tickRate, Qt::PreciseTimer, this );
 
     m_realtime.start();
 
@@ -377,9 +401,15 @@ void CGLView::initializeGL()
 
 void CGLView::updateMidiTask()
 {
-    const auto ticks = m_realtime.restart();
-    m_displayUpdateTicks += ticks;
-    m_eventBits |= m_song->task(ticks);
+    qint64 remaining = m_realtime.restart();
+    const int ideal = m_idealTickMs;
+    while (remaining > 0)
+    {
+        const qint64 slice = (ideal > 0) ? qMin<qint64>(ideal, remaining) : remaining;
+        m_displayUpdateTicks += slice;
+        m_eventBits |= m_song->task(slice);
+        remaining -= slice;
+    }
 }
 
 void CGLView::timerEvent(QTimerEvent *event)
