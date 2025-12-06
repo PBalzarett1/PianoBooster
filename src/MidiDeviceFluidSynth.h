@@ -32,34 +32,35 @@
 #include "MidiDeviceBase.h"
 
 #include <fluidsynth.h>
+#include <memory>
 
 #define FLUID_DEFAULT_GAIN 80
 
 class CMidiDeviceFluidSynth : public CMidiDeviceBase
 {
-    virtual void init();
+    void init() override;
     //! add a midi event to be played immediately
-    virtual void playMidiEvent(const CMidiEvent & event);
-    virtual int checkMidiInput();
-    virtual CMidiEvent readMidiInput();
-    virtual QStringList getMidiPortList(midiType_t type);
+    void playMidiEvent(const CMidiEvent & event) override;
+    int checkMidiInput() override;
+    CMidiEvent readMidiInput() override;
+    QStringList getMidiPortList(midiType_t type) override;
 
-    virtual bool openMidiPort(midiType_t type, const QString &portName);
-    virtual void closeMidiPort(midiType_t type, int index);
+    bool openMidiPort(midiType_t type, const QString &portName) override;
+    void closeMidiPort(midiType_t type, int index) override;
 
-    virtual bool validMidiConnection() {return m_validConnection;}
+    bool validMidiConnection() override {return m_validConnection;}
 
     // based on the fluid synth settings
-    virtual int     midiSettingsSetStr(const QString &name, const QString &str);
-    virtual int     midiSettingsSetNum(const QString &name, double val);
-    virtual int     midiSettingsSetInt(const QString &name, int val);
-    virtual QString midiSettingsGetStr(const QString &name);
-    virtual double  midiSettingsGetNum(const QString &name);
-    virtual int     midiSettingsGetInt(const QString &name);
+    int     midiSettingsSetStr(const QString &name, const QString &str) override;
+    int     midiSettingsSetNum(const QString &name, double val) override;
+    int     midiSettingsSetInt(const QString &name, int val) override;
+    QString midiSettingsGetStr(const QString &name) override;
+    double  midiSettingsGetNum(const QString &name) override;
+    int     midiSettingsGetInt(const QString &name) override;
 
 public:
     CMidiDeviceFluidSynth();
-    ~CMidiDeviceFluidSynth();
+    ~CMidiDeviceFluidSynth() override;
 
     static QString getFluidInternalName()
     {
@@ -67,13 +68,23 @@ public:
     }
 
 private:
+    struct FluidSettingsDeleter {
+        void operator()(fluid_settings_t* settings) const { if (settings) delete_fluid_settings(settings); }
+    };
+    struct FluidSynthDeleter {
+        void operator()(fluid_synth_t* synth) const { if (synth) delete_fluid_synth(synth); }
+    };
+    struct FluidAudioDeleter {
+        void operator()(fluid_audio_driver_t* driver) const { if (driver) delete_fluid_audio_driver(driver); }
+    };
+
     static constexpr const char* FLUID_NAME = "(FluidSynth)";
     unsigned char m_savedRawBytes[40]; // Raw data is used for used for a SYSTEM_EVENT
     unsigned int m_rawDataIndex;
 
-    fluid_settings_t* m_fluidSettings;
-    fluid_synth_t* m_synth;
-    fluid_audio_driver_t* m_audioDriver;
+    std::unique_ptr<fluid_settings_t, FluidSettingsDeleter> m_fluidSettings;
+    std::unique_ptr<fluid_synth_t, FluidSynthDeleter> m_synth;
+    std::unique_ptr<fluid_audio_driver_t, FluidAudioDeleter> m_audioDriver;
     int m_soundFontId;
     bool m_validConnection;
 };

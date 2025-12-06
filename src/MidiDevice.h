@@ -38,30 +38,31 @@
 #include "MidiEvent.h"
 
 #include "MidiDeviceBase.h"
+#include <memory>
 
 class CMidiDevice : public CMidiDeviceBase
 {
 public:
     CMidiDevice();
-    ~CMidiDevice();
-    void init();
+    ~CMidiDevice() override;
+    void init() override;
     //! add a midi event to be played immediately
-    void playMidiEvent(const CMidiEvent & event);
-    int checkMidiInput();
-    CMidiEvent readMidiInput();
+    void playMidiEvent(const CMidiEvent & event) override;
+    int checkMidiInput() override;
+    CMidiEvent readMidiInput() override;
     bool validMidiOutput();
-    virtual bool validMidiConnection() {return validMidiOutput();}
+    bool validMidiConnection() override {return validMidiOutput();}
 
-    QStringList getMidiPortList(midiType_t type);
-    bool openMidiPort(midiType_t type, const QString &portName);
-    void closeMidiPort(midiType_t type, int index);
+    QStringList getMidiPortList(midiType_t type) override;
+    bool openMidiPort(midiType_t type, const QString &portName) override;
+    void closeMidiPort(midiType_t type, int index) override;
     // based on the fluid synth settings
-    virtual int     midiSettingsSetStr(const QString &name, const QString &str);
-    virtual int     midiSettingsSetNum(const QString &name, double val);
-    virtual int     midiSettingsSetInt(const QString &name, int val);
-    virtual QString midiSettingsGetStr(const QString &name);
-    virtual double  midiSettingsGetNum(const QString &name);
-    virtual int     midiSettingsGetInt(const QString &name);
+    int     midiSettingsSetStr(const QString &name, const QString &str) override;
+    int     midiSettingsSetNum(const QString &name, double val) override;
+    int     midiSettingsSetInt(const QString &name, int val) override;
+    QString midiSettingsGetStr(const QString &name) override;
+    double  midiSettingsGetNum(const QString &name) override;
+    int     midiSettingsGetInt(const QString &name) override;
 
     void flushMidiInput()
     {
@@ -71,9 +72,9 @@ public:
     }
 
 private:
-    CMidiDeviceBase* m_rtMidiDevice;
+    std::unique_ptr<CMidiDeviceBase> m_rtMidiDevice;
 #if WITH_INTERNAL_FLUIDSYNTH
-    CMidiDeviceBase* m_fluidSynthMidiDevice;
+    std::unique_ptr<CMidiDeviceBase> m_fluidSynthMidiDevice;
 #endif
     CMidiDeviceBase* m_selectedMidiInputDevice;
     CMidiDeviceBase* m_selectedMidiOutputDevice;

@@ -60,21 +60,25 @@
 #define debugSettings(args)
 #endif
 
-CSettings::CSettings(QtWindow *mainWindow) : QSettings(CSettings::IniFormat, CSettings::UserScope, "PianoBooster", "Piano Booster"),
-                                 m_mainWindow(mainWindow)
+CSettings::CSettings(QtWindow *mainWindow)
+    : QSettings(CSettings::IniFormat, CSettings::UserScope, "PianoBooster", "Piano Booster"),
+      m_mainWindow(mainWindow),
+      m_song(nullptr),
+      m_guiSidePanel(nullptr),
+      m_guiTopBar(nullptr),
+      m_noteNamesEnabled(value(QStringLiteral("Score/NoteNames"), true).toBool()),
+      m_coloredNotes(value(QStringLiteral("Score/ColoredNotes"), false).toBool()),
+      m_tutorPagesEnabled(value(QStringLiteral("Tutor/TutorPages"), true).toBool()),
+      m_advancedMode(false),
+      m_followThroughErrorsEnabled(value(QStringLiteral("Score/FollowThroughErrors"), false).toBool()),
+      m_bookPath(),
+      m_currentBookName(),
+      m_currentSongName(),
+      m_warningMessage(),
+      m_fluidSoundFontNames(value(QStringLiteral("FluidSynth/SoundFont")).toStringList()),
+      m_pianistActive(false)
 {
-    // It is all done in the initialisation list
-
-    m_advancedMode = false;
-    m_pianistActive = false;
-    m_noteNamesEnabled = value("Score/NoteNames", true ).toBool();
-    m_coloredNotes = value("Score/ColoredNotes", false ).toBool();
-    m_tutorPagesEnabled = value("Tutor/TutorPages", true ).toBool();
-    CNotation::setCourtesyAccidentals(value("Score/CourtesyAccidentals", false ).toBool());
-    m_followThroughErrorsEnabled = value("Score/FollowThroughErrors", false ).toBool();
-
-    // load Fluid settings
-    setFluidSoundFontNames( value("FluidSynth/SoundFont").toStringList());
+    CNotation::setCourtesyAccidentals(value(QStringLiteral("Score/CourtesyAccidentals"), false ).toBool());
 }
 
 void CSettings::setDefaultValue(const QString & key, const QVariant & value )
@@ -94,28 +98,28 @@ void CSettings::init(CSong* song, GuiSidePanel* sidePanel, GuiTopBar* topBar)
 
 void CSettings::setNoteNamesEnabled(bool value) {
     m_noteNamesEnabled = value;
-    setValue("Score/NoteNames", value );
+    setValue(QStringLiteral("Score/NoteNames"), value );
 }
 
 void CSettings::setColoredNotes(bool value) {
     m_coloredNotes = value;
-    setValue("Score/ColoredNotes", value );
+    setValue(QStringLiteral("Score/ColoredNotes"), value );
 }
 
 void CSettings::setTutorPagesEnabled(bool value) {
     m_tutorPagesEnabled = value;
-    setValue("Tutor/TutorPages", value );
+    setValue(QStringLiteral("Tutor/TutorPages"), value );
     updateTutorPage();
 }
 
 void CSettings::setCourtesyAccidentals(bool value) {
     CNotation::setCourtesyAccidentals(value);
-    setValue("Score/CourtesyAccidentals", value );
+    setValue(QStringLiteral("Score/CourtesyAccidentals"), value );
 }
 
 void CSettings::setFollowThroughErrorsEnabled(bool value) {
     m_followThroughErrorsEnabled = value;
-    setValue("Score/FollowThroughErrors", value );
+    setValue(QStringLiteral("Score/FollowThroughErrors"), value );
 }
 
 // Open a document if it exists or else create it (also delete an duplicates
@@ -134,7 +138,7 @@ QDomElement CSettings::openDomElement(QDomElement parent, const QString & elemen
         debugSettings(("openDomElement2 tagName %s %s", qPrintable(e.tagName()), qPrintable(elementName)));
         if(!e.isNull() && e.tagName() == elementName)
         {
-            if (attributeName.isEmpty() || e.attribute("name") == attributeName)
+            if (attributeName.isEmpty() || e.attribute(QStringLiteral("name")) == attributeName)
             {
                 debugSettings(("openDomElement3 ragName %s %s", qPrintable(e.attribute("name")), qPrintable(attributeName)));
 
@@ -152,7 +156,7 @@ QDomElement CSettings::openDomElement(QDomElement parent, const QString & elemen
         // Create the element because it does not exist
         wantedElement = m_domDocument.createElement(elementName);
         if (!attributeName.isEmpty() )
-            wantedElement.setAttribute("name", attributeName);
+            wantedElement.setAttribute(QStringLiteral("name"), attributeName);
         parent.appendChild(wantedElement);
     }
 
@@ -349,16 +353,16 @@ QStringList CSettings::getSongList()
     debugSettings(("getSongList %s + %s", qPrintable(getCurrentBookName()), qPrintable(m_bookPath)));
     QDir dirSongs = QDir(m_bookPath + getCurrentBookName());
     dirSongs.setFilter(QDir::Files);
-    QStringList fileNames = dirSongs.entryList();
+    const QStringList fileNames = dirSongs.entryList();
 
     QStringList songNames;
-    for (int i = 0; i < fileNames.size(); i++)
+    for (const auto &fileName : fileNames)
     {
-        if ( fileNames.at(i).endsWith(".mid", Qt::CaseInsensitive ) ||
-             fileNames.at(i).endsWith(".midi", Qt::CaseInsensitive ) ||
-             fileNames.at(i).endsWith(".kar", Qt::CaseInsensitive ) )
+        if ( fileName.endsWith(".mid", Qt::CaseInsensitive ) ||
+             fileName.endsWith(".midi", Qt::CaseInsensitive ) ||
+             fileName.endsWith(".kar", Qt::CaseInsensitive ) )
         {
-            songNames  +=  fileNames.at(i);
+            songNames  +=  fileName;
         }
     }
 
@@ -376,7 +380,7 @@ void CSettings::writeSettings()
 {
 
     if (QFile::exists(getCurrentSongLongFileName() ))
-        setValue("CurrentSong", getCurrentSongLongFileName());
+        setValue(QStringLiteral("CurrentSong"), getCurrentSongLongFileName());
     saveXmlFile();
 }
 
@@ -384,18 +388,18 @@ void CSettings::loadSettings()
 {
     unzipBoosterMusicBooks();
     // Set default values
-    setValue("PianoBooster/Version", PB_VERSION);
-    setDefaultValue("ShortCuts/LeftHand", "F2");
-    setDefaultValue("ShortCuts/BothHands","F3");
-    setDefaultValue("ShortCuts/RightHand","F4");
-    setDefaultValue("ShortCuts/PlayFromStart",tr("space"));
-    setDefaultValue("ShortCuts/PlayPause","P");
-    setDefaultValue("ShortCuts/Faster","=");
-    setDefaultValue("ShortCuts/Slower","-");
-    setDefaultValue("ShortCuts/NextSong","]");
-    setDefaultValue("ShortCuts/PreviousSong","[");
-    setDefaultValue("ShortCuts/NextBook","{");
-    setDefaultValue("ShortCuts/PreviousBook","}");
+    setValue(QStringLiteral("PianoBooster/Version"), PB_VERSION);
+    setDefaultValue(QStringLiteral("ShortCuts/LeftHand"), QStringLiteral("F2"));
+    setDefaultValue(QStringLiteral("ShortCuts/BothHands"), QStringLiteral("F3"));
+    setDefaultValue(QStringLiteral("ShortCuts/RightHand"), QStringLiteral("F4"));
+    setDefaultValue(QStringLiteral("ShortCuts/PlayFromStart"), tr("space"));
+    setDefaultValue(QStringLiteral("ShortCuts/PlayPause"), QStringLiteral("P"));
+    setDefaultValue(QStringLiteral("ShortCuts/Faster"), QStringLiteral("="));
+    setDefaultValue(QStringLiteral("ShortCuts/Slower"), QStringLiteral("-"));
+    setDefaultValue(QStringLiteral("ShortCuts/NextSong"), QStringLiteral("]"));
+    setDefaultValue(QStringLiteral("ShortCuts/PreviousSong"), QStringLiteral("["));
+    setDefaultValue(QStringLiteral("ShortCuts/NextBook"), QStringLiteral("{"));
+    setDefaultValue(QStringLiteral("ShortCuts/PreviousBook"), QStringLiteral("}"));
 //    QString songName = value("CurrentSong").toString();
 //    if (!songName.isEmpty())
 //        openSongFile( songName );
@@ -410,9 +414,9 @@ void CSettings::loadSettings()
 void CSettings::unzipBoosterMusicBooks()
 {
     // Set default value
-    const QString ZIPFILENAME("BoosterMusicBooks.zip");
+    const QString ZIPFILENAME(QStringLiteral("BoosterMusicBooks.zip"));
 
-    if (value("PianoBooster/MusicRelease", 0).toInt() < MUSIC_RELEASE)
+    if (value(QStringLiteral("PianoBooster/MusicRelease"), 0).toInt() < MUSIC_RELEASE)
     {
         QString musicSrcDir = QApplication::applicationDirPath() + "/";
 
@@ -482,7 +486,7 @@ void CSettings::unzipBoosterMusicBooks()
         QString fileName(destMusicDir.absolutePath() + "/BoosterMusicBooks" + QString::number(MUSIC_RELEASE) + "/Beginner Course/01-StartWithMiddleC.mid");
         openSongFile(fileName);
         m_mainWindow->setCurrentFile(fileName);
-        setValue("PianoBooster/MusicRelease", MUSIC_RELEASE);
+        setValue(QStringLiteral("PianoBooster/MusicRelease"), MUSIC_RELEASE);
     }
 }
 
@@ -493,7 +497,7 @@ void CSettings::setCurrentSongName(const QString & name)
     saveSongSettings();
     m_currentSongName = name;
     debugSettings(("setCurrentSongName %s -- %s", qPrintable(name), qPrintable(getCurrentSongLongFileName())));
-    setValue("CurrentSong", getCurrentSongLongFileName());
+    setValue(QStringLiteral("CurrentSong"), getCurrentSongLongFileName());
 
     m_song->loadSong(getCurrentSongLongFileName());
     loadSongSettings();
@@ -555,7 +559,7 @@ void CSettings::setupDefaultSoundFont(){
         QDir directory(appPath);
         directory.cd("soundfont");
         QStringList dirList = directory.entryList(QStringList(),QDir::AllEntries);
-        foreach(QString filename, dirList)
+        for (const auto &filename : dirList)
         {
             // Find the first sound font file
             if ( filename.endsWith(".sf2", Qt::CaseInsensitive ) )
@@ -569,7 +573,7 @@ void CSettings::setupDefaultSoundFont(){
         if (!defaultSoundFont.isFile())
         {
             QStringList possibleSoundFontFolders = {"/usr/share/soundfonts","/usr/share/sounds/sf2"};
-            for (QString soundFontFolder:possibleSoundFontFolders)
+            for (const auto &soundFontFolder : possibleSoundFontFolders)
             {
                 // fluid-soundfont-gm Fluid (R3) General MIDI SoundFont (GM) package
                 QFileInfo foundSoundFont(soundFontFolder, "FluidR3_GM.sf2");
@@ -584,8 +588,8 @@ void CSettings::setupDefaultSoundFont(){
 
         if (defaultSoundFont.isFile()) {
             setFluidSoundFontNames(defaultSoundFont.filePath());
-            setValue("Midi/Output",CMidiDeviceFluidSynth::getFluidInternalName() );
-            setValue("LastSoundFontDir", defaultSoundFont.path());
+            setValue(QStringLiteral("Midi/Output"), CMidiDeviceFluidSynth::getFluidInternalName() );
+            setValue(QStringLiteral("LastSoundFontDir"), defaultSoundFont.path());
             saveSoundFontSettings();
             m_song->openMidiPort(CMidiDevice::MIDI_OUTPUT, CMidiDeviceFluidSynth::getFluidInternalName());
         }

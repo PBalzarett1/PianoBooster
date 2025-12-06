@@ -29,39 +29,40 @@
 
 #include "MidiDeviceBase.h"
 #include "rtmidi/RtMidi.h"
+#include <memory>
 
 class CMidiDeviceRt : public CMidiDeviceBase
 {
-    virtual void init();
+    void init() override;
     //! add a midi event to be played immediately
-    virtual void playMidiEvent(const CMidiEvent & event);
-    virtual int checkMidiInput();
-    virtual CMidiEvent readMidiInput();
+    void playMidiEvent(const CMidiEvent & event) override;
+    int checkMidiInput() override;
+    CMidiEvent readMidiInput() override;
 
-    virtual QStringList getMidiPortList(midiType_t type);
+    QStringList getMidiPortList(midiType_t type) override;
 
-    virtual bool openMidiPort(midiType_t type, const QString &portName);
-    virtual void closeMidiPort(midiType_t type, int index);
+    bool openMidiPort(midiType_t type, const QString &portName) override;
+    void closeMidiPort(midiType_t type, int index) override;
 
-    virtual bool validMidiConnection() {return m_validConnection;}
+    bool validMidiConnection() override {return m_validConnection;}
 
     // based on the fluid synth settings
-    virtual int     midiSettingsSetStr(const QString &name, const QString &str);
-    virtual int     midiSettingsSetNum(const QString &name, double val);
-    virtual int     midiSettingsSetInt(const QString &name, int val);
-    virtual QString midiSettingsGetStr(const QString &name);
-    virtual double  midiSettingsGetNum(const QString &name);
-    virtual int     midiSettingsGetInt(const QString &name);
+    int     midiSettingsSetStr(const QString &name, const QString &str) override;
+    int     midiSettingsSetNum(const QString &name, double val) override;
+    int     midiSettingsSetInt(const QString &name, int val) override;
+    QString midiSettingsGetStr(const QString &name) override;
+    double  midiSettingsGetNum(const QString &name) override;
+    int     midiSettingsGetInt(const QString &name) override;
 
 public:
     CMidiDeviceRt();
-    ~CMidiDeviceRt();
+    ~CMidiDeviceRt() override;
 
 
 private:
 
-    RtMidiOut *m_midiout;
-    RtMidiIn *m_midiin;
+    std::unique_ptr<RtMidiOut> m_midiout;
+    std::unique_ptr<RtMidiIn> m_midiin;
 
     double m_stamp;
 

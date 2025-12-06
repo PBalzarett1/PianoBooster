@@ -31,46 +31,41 @@
 #include <limits>
 
 CMidiDeviceRt::CMidiDeviceRt()
+    : m_midiout(),
+      m_midiin(),
+      m_stamp(0.0),
+      m_midiPorts{-1, -1},
+      m_inputMessage(),
+      m_rawDataIndex(0),
+      m_validConnection(false)
 {
-    m_validConnection = false;
-    m_midiout = nullptr;
-    m_midiin = nullptr;
-    m_midiPorts[0] = -1;
-    m_midiPorts[1] = -1;
-    m_rawDataIndex = 0;
     init();
 }
 
-CMidiDeviceRt::~CMidiDeviceRt()
-{
-    if (m_midiout!=nullptr) { delete m_midiout; }
-    if (m_midiin!=nullptr) {delete m_midiin; }
-}
+CMidiDeviceRt::~CMidiDeviceRt() = default;
 
 void CMidiDeviceRt::init()
 {
-    if (m_midiin == nullptr || m_midiout == nullptr) {
+    if (!m_midiin || !m_midiout) {
         m_midiPorts[0] = -1;
         m_midiPorts[1] = -1;
         m_rawDataIndex = 0;
-        if (m_midiout!=nullptr) {
-            delete m_midiout;
-            m_midiout = nullptr;
+        if (m_midiout) {
+            m_midiout.reset();
         }
         try {
-            m_midiout = new RtMidiOut();
+            m_midiout.reset(new RtMidiOut());
         }
         catch(RtMidiError &error){
             error.printMessage();
             return;
         }
 
-        if (m_midiin!=nullptr) {
-            delete m_midiin;
-            m_midiin = nullptr;
+        if (m_midiin) {
+            m_midiin.reset();
         }
         try {
-            m_midiin = new RtMidiIn();
+            m_midiin.reset(new RtMidiIn());
         }
         catch(RtMidiError &error){
             error.printMessage();
@@ -101,9 +96,9 @@ QStringList CMidiDeviceRt::getMidiPortList(midiType_t type)
     RtMidi* midiDevice;
 
     if (type == MIDI_INPUT)
-        midiDevice = m_midiin;
+        midiDevice = m_midiin.get();
     else
-        midiDevice = m_midiout;
+        midiDevice = m_midiout.get();
 
     nPorts = midiDevice->getPortCount();
 
@@ -138,12 +133,12 @@ bool CMidiDeviceRt::openMidiPort(midiType_t type, const QString &portName)
     int dev;
     if (type == MIDI_INPUT)
     {
-        midiDevice = m_midiin;
+        midiDevice = m_midiin.get();
         dev = 0;
     }
     else
     {
-        midiDevice = m_midiout;
+        midiDevice = m_midiout.get();
         dev = 1;
     }
 

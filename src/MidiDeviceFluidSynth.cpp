@@ -46,12 +46,14 @@ static void debug_settings_foreach_func (void *data,
 }
 
 CMidiDeviceFluidSynth::CMidiDeviceFluidSynth()
+    : m_savedRawBytes{0},
+      m_rawDataIndex(0),
+      m_fluidSettings(nullptr),
+      m_synth(nullptr),
+      m_audioDriver(nullptr),
+      m_soundFontId(-1),
+      m_validConnection(false)
 {
-    m_synth = nullptr;
-    m_fluidSettings = nullptr;
-    m_audioDriver = nullptr;
-    m_rawDataIndex = 0;
-    m_validConnection = false;
 }
 
 CMidiDeviceFluidSynth::~CMidiDeviceFluidSynth()
@@ -98,45 +100,45 @@ bool CMidiDeviceFluidSynth::openMidiPort(midiType_t type, const QString &portNam
     if (fontList.size() == 0) {return false;}
 
     // Create the settings.
-    m_fluidSettings = new_fluid_settings();
+    m_fluidSettings.reset(new_fluid_settings());
 
     // Change the settings if necessary
-    fluid_settings_setnum(m_fluidSettings, "synth.sample-rate", qsettings->value("FluidSynth/sampleRateCombo",22050).toInt());
-    fluid_settings_setint(m_fluidSettings, "audio.period-size", qsettings->value("FluidSynth/bufferSizeCombo", 128).toInt());
-    fluid_settings_setint(m_fluidSettings, "audio.periods", qsettings->value("FluidSynth/bufferCountCombo", 4).toInt());
+    fluid_settings_setnum(m_fluidSettings.get(), "synth.sample-rate", qsettings->value("FluidSynth/sampleRateCombo",22050).toInt());
+    fluid_settings_setint(m_fluidSettings.get(), "audio.period-size", qsettings->value("FluidSynth/bufferSizeCombo", 128).toInt());
+    fluid_settings_setint(m_fluidSettings.get(), "audio.periods", qsettings->value("FluidSynth/bufferCountCombo", 4).toInt());
 
 #if !defined (Q_OS_WINDOWS)
-    fluid_settings_setstr(m_fluidSettings, "audio.driver", qsettings->value("FluidSynth/audioDriverCombo", "pulseaudio").toString().toStdString().c_str());
+    fluid_settings_setstr(m_fluidSettings.get(), "audio.driver", qsettings->value("FluidSynth/audioDriverCombo", "pulseaudio").toString().toStdString().c_str());
 #endif
 
     // Create the synthesizer.
-    m_synth = new_fluid_synth(m_fluidSettings);
+    m_synth.reset(new_fluid_synth(m_fluidSettings.get()));
 #if (FLUIDSYNTH_VERSION_MAJOR >= 2) && (FLUIDSYNTH_VERSION_MINOR >= 2)
-    fluid_synth_reverb_on(m_synth, -1, 0);
-    fluid_synth_chorus_on(m_synth, -1, 0);
+    fluid_synth_reverb_on(m_synth.get(), -1, 0);
+    fluid_synth_chorus_on(m_synth.get(), -1, 0);
 #else
-    fluid_synth_set_reverb_on(m_synth, 0);
-    fluid_synth_set_chorus_on(m_synth, 0);
+    fluid_synth_set_reverb_on(m_synth.get(), 0);
+    fluid_synth_set_chorus_on(m_synth.get(), 0);
 #endif
 
     // Create the audio driver.
-    m_audioDriver = new_fluid_audio_driver(m_fluidSettings, m_synth);
+    m_audioDriver.reset(new_fluid_audio_driver(m_fluidSettings.get(), m_synth.get()));
 
     QString pathName = fontList.at(0);
     ppLogDebug("Sound font %s", qPrintable(pathName));
-    m_soundFontId = fluid_synth_sfload(m_synth, qPrintable(pathName), 0);
+    m_soundFontId = fluid_synth_sfload(m_synth.get(), qPrintable(pathName), 0);
     if (m_soundFontId == -1)
         return false;
 
     for (int channel = 0; channel < MAX_MIDI_CHANNELS ; channel++)
     {
-         fluid_synth_program_change(m_synth, channel, GM_PIANO_PATCH);
+         fluid_synth_program_change(m_synth.get(), channel, GM_PIANO_PATCH);
     }
-    fluid_synth_set_gain(m_synth, qsettings->value("FluidSynth/masterGainSpin", FLUID_DEFAULT_GAIN).toFloat()/100.0f );
+    fluid_synth_set_gain(m_synth.get(), qsettings->value("FluidSynth/masterGainSpin", FLUID_DEFAULT_GAIN).toFloat()/100.0f );
     m_validConnection = true;
     if (Cfg::logLevel >= LOG_LEVEL_DEBUG) {
-        s_debug_fluid_settings = m_fluidSettings;
-        fluid_settings_foreach(m_fluidSettings, 0, debug_settings_foreach_func);
+        s_debug_fluid_settings = m_fluidSettings.get();
+        fluid_settings_foreach(m_fluidSettings.get(), 0, debug_settings_foreach_func);
     }
     return true;
 }
@@ -149,14 +151,13 @@ void CMidiDeviceFluidSynth::closeMidiPort(midiType_t type, int index)
     if (type != MIDI_OUTPUT)
         return;
 
-    if (m_fluidSettings == nullptr)
+    if (!m_fluidSettings)
         return;
 
     /* Clean up */
-    delete_fluid_audio_driver(m_audioDriver);
-    delete_fluid_synth(m_synth);
-    delete_fluid_settings(m_fluidSettings);
-    m_fluidSettings = nullptr;
+    m_audioDriver.reset();
+    m_synth.reset();
+    m_fluidSettings.reset();
     m_rawDataIndex = 0;
 
 }
@@ -164,17 +165,17 @@ void CMidiDeviceFluidSynth::closeMidiPort(midiType_t type, int index)
 //! add a midi event to be played immediately
 void CMidiDeviceFluidSynth::playMidiEvent(const CMidiEvent & event)
 {
-    if (m_synth == nullptr)
+    if (!m_synth)
         return;
 
     int channel = event.channel() & 0x0f;
     switch(event.type())
     {
         case MIDI_NOTE_OFF: // NOTE_OFF
-            fluid_synth_noteoff(m_synth, channel, event.note());
+            fluid_synth_noteoff(m_synth.get(), channel, event.note());
             break;
         case MIDI_NOTE_ON:      // NOTE_ON
-            fluid_synth_noteon(m_synth, channel, event.note(), event.velocity());
+            fluid_synth_noteon(m_synth.get(), channel, event.note(), event.velocity());
             break;
 
         case MIDI_NOTE_PRESSURE: //POLY_AFTERTOUCH: 3 bytes
@@ -182,21 +183,21 @@ void CMidiDeviceFluidSynth::playMidiEvent(const CMidiEvent & event)
             break;
 
         case MIDI_CONTROL_CHANGE: //CONTROL_CHANGE:
-            fluid_synth_cc(m_synth, channel, event.data1(), event.data2());
+            fluid_synth_cc(m_synth.get(), channel, event.data1(), event.data2());
             //ppLogTrace("MIDI_CONTROL_CHANGE %d %d %d", channel, event.data1(), event.data2());
             break;
 
         case MIDI_PROGRAM_CHANGE: //PROGRAM_CHANGE:
-            fluid_synth_program_change(m_synth, channel, event.programme());
+            fluid_synth_program_change(m_synth.get(), channel, event.programme());
             break;
 
         case MIDI_CHANNEL_PRESSURE: //AFTERTOUCH: 2 bytes only
-            fluid_synth_channel_pressure(m_synth, channel, event.programme());
+            fluid_synth_channel_pressure(m_synth.get(), channel, event.programme());
             break;
 
         case MIDI_PITCH_BEND: //PITCH_BEND:
             // a 14 bit number LSB first 0x4000 is the off positions
-            fluid_synth_pitch_bend(m_synth, channel, (event.data2() << 7) | event.data1());
+            fluid_synth_pitch_bend(m_synth.get(), channel, (event.data2() << 7) | event.data1());
             break;
 
         case  MIDI_PB_collateRawMidiData: //used for a SYSTEM_EVENT
@@ -232,14 +233,14 @@ int CMidiDeviceFluidSynth::midiSettingsSetStr(const QString &name, const QString
     if (!m_fluidSettings)
         return 0;
 
-    return fluid_settings_setstr(m_fluidSettings, (char *)qPrintable(name), (char *)qPrintable(str));
+    return fluid_settings_setstr(m_fluidSettings.get(), (char *)qPrintable(name), (char *)qPrintable(str));
 }
 
 int CMidiDeviceFluidSynth::midiSettingsSetNum(const QString &name, double val)
 {
     if (!m_fluidSettings)
         return 0;
-    return fluid_settings_setnum(m_fluidSettings, (char *)qPrintable(name), val);
+    return fluid_settings_setnum(m_fluidSettings.get(), (char *)qPrintable(name), val);
 }
 
 int CMidiDeviceFluidSynth::midiSettingsSetInt(const QString &name, int val)
@@ -247,7 +248,7 @@ int CMidiDeviceFluidSynth::midiSettingsSetInt(const QString &name, int val)
     if (!m_fluidSettings)
         return 0;
 
-    return fluid_settings_setint(m_fluidSettings, (char *)qPrintable(name), val);
+    return fluid_settings_setint(m_fluidSettings.get(), (char *)qPrintable(name), val);
 }
 
 QString CMidiDeviceFluidSynth::midiSettingsGetStr(const QString &name)
@@ -266,7 +267,7 @@ double CMidiDeviceFluidSynth::midiSettingsGetNum(const QString &name)
     if (!m_fluidSettings)
         return 0.0;
     double val;
-    fluid_settings_getnum(m_fluidSettings, (char *)qPrintable(name), &val);
+    fluid_settings_getnum(m_fluidSettings.get(), (char *)qPrintable(name), &val);
     return val;
 }
 
@@ -275,6 +276,6 @@ int CMidiDeviceFluidSynth::midiSettingsGetInt(const QString &name)
     if (!m_fluidSettings)
         return 0;
     int val = 0;
-    fluid_settings_getint(m_fluidSettings, (char *)qPrintable(name),&val);
+    fluid_settings_getint(m_fluidSettings.get(), (char *)qPrintable(name),&val);
     return val;
 }

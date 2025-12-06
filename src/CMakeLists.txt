@@ -10,7 +10,7 @@ else()
    option(USE_BUNDLED_RTMIDI "Build with bundled rtmidi" ON)
 endif()
 
-cmake_minimum_required(VERSION 2.4)
+cmake_minimum_required(VERSION 3.5)
 if(COMMAND cmake_policy)
     cmake_policy(SET CMP0003 NEW)
 endif(COMMAND cmake_policy)
@@ -21,6 +21,10 @@ endif(WIN32)
 
 # set project's name
 PROJECT( pianobooster )
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
 
 cmake_policy(SET CMP0020 NEW)
 cmake_policy(SET CMP0043 NEW)
@@ -99,7 +103,6 @@ endif(${CMAKE_SYSTEM} MATCHES "Windows")
 
 if(${CMAKE_SYSTEM} MATCHES "Darwin")
     ADD_DEFINITIONS(-D__MACOSX_CORE__)
-    ADD_DEFINITIONS(-std=c++11)
     LINK_LIBRARIES("-framework CoreMidi -framework CoreAudio -framework CoreFoundation -framework OpenGL")
 endif(${CMAKE_SYSTEM} MATCHES "Darwin")
 

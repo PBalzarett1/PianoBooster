@@ -24,13 +24,51 @@
 
 */
 
-#include "GlView.h"
 #include "QtWindow.h"
+#include "GlView.h"
 #include "version.h"
 
+#include "GuiKeyboardSetupDialog.h"
+#include "GuiMidiSetupDialog.h"
+#include "GuiPreferencesDialog.h"
+#include "GuiSidePanel.h"
+#include "GuiSongDetailsDialog.h"
+#include "GuiTopBar.h"
+#include "Score.h"
+#include "Settings.h"
+
+#include <QAction>
+#include <QApplication>
+#include <QCloseEvent>
+#include <QCoreApplication>
 #include <QDebug>
+#include <QDesktopServices>
+#include <QDir>
+#include <QFile>
+#include <QFileDialog>
+#include <QFileInfo>
+#include <QHBoxLayout>
+#include <QIcon>
+#include <QKeyEvent>
+#include <QLibraryInfo>
+#include <QMenuBar>
+#include <QMenu>
+#include <QMessageBox>
+#include <QPoint>
+#include <QSizePolicy>
+#include <QSize>
 #include <QSurfaceFormat>
 #include <QStringBuilder>
+#include <QStringList>
+#include <QTextBrowser>
+#include <QTextStream>
+#include <QTimer>
+#include <QUrl>
+#include <QVBoxLayout>
+#include <QWidget>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
 
 #ifdef __linux__
 #ifndef USE_REALTIME_PRIORITY
@@ -57,8 +95,33 @@ static int set_realtime_priority(int policy, int prio)
 #endif
 
 QtWindow::QtWindow()
+    : m_settings(new CSettings(this)),
+      m_sidePanel(nullptr),
+      m_topBar(nullptr),
+      m_tutorWindow(nullptr),
+      m_glWidget(nullptr),
+      m_openAct(nullptr),
+      m_exitAct(nullptr),
+      m_aboutAct(nullptr),
+      m_shortcutAct(nullptr),
+      m_songPlayAct(nullptr),
+      m_setupMidiAct(nullptr),
+      m_setupKeyboardAct(nullptr),
+      m_sidePanelStateAct(nullptr),
+      m_viewPianoKeyboard(nullptr),
+      m_fullScreenStateAct(nullptr),
+      m_setupPreferencesAct(nullptr),
+      m_songDetailsAct(nullptr),
+      m_fileMenu(nullptr),
+      m_viewMenu(nullptr),
+      m_songMenu(nullptr),
+      m_setupMenu(nullptr),
+      m_helpMenu(nullptr),
+      m_song(nullptr),
+      m_score(nullptr),
+      m_separatorAct(nullptr),
+      m_recentFileActs{}
 {
-    m_settings = new CSettings(this);
     setWindowIcon(QIcon(":/images/pianobooster.png"));
     setWindowTitle(tr("Piano Booster"));
 
@@ -74,17 +137,13 @@ QtWindow::QtWindow()
         ppLogInfo("Open GL Swap Interval %d", value);
     }
 
-    for (int i = 0; i < maxRecentFiles(); ++i)
-         m_recentFileActs[i] = nullptr;
-    m_separatorAct = nullptr;
-
 #if USE_REALTIME_PRIORITY
     int rt_prio = sched_get_priority_max(SCHED_FIFO);
     set_realtime_priority(SCHED_FIFO, rt_prio);
 #endif
 
     QString antiAliasingSetting = m_settings->value("anti-aliasing").toString();
-    if (antiAliasingSetting.isEmpty() || antiAliasingSetting=="on"){
+    if (antiAliasingSetting.isEmpty() || antiAliasingSetting == "on") {
         fmt.setSamples(4);
     }
 
@@ -137,10 +196,10 @@ QtWindow::QtWindow()
 
     readSettings();
 
-    QTimer::singleShot(100, this, [&](){
+    QTimer::singleShot(100, this, [this]() {
         QString songName = m_settings->value("CurrentSong").toString();
         if (!songName.isEmpty())
-            m_settings->openSongFile( songName );
+            m_settings->openSongFile(songName);
     });
 }
 
@@ -162,40 +221,148 @@ QtWindow::~QtWindow()
     delete m_settings;
 }
 
+void QtWindow::songEventUpdated(eventBits_t eventBits)
+{
+    if ((eventBits & EVENT_BITS_playingStopped) != 0) {
+        if (m_sidePanel->isRepeatSong()) {
+            m_topBar->on_playFromStartButton_clicked(true);
+        } else {
+            m_topBar->setPlayButtonState(false, true);
+        }
+    }
+    if ((eventBits & EVENT_BITS_loadSong) != 0) {
+        m_topBar->setPlayButtonState(false, true);
+    }
+}
+
+void QtWindow::showPreferencesDialog()
+{
+    GuiPreferencesDialog preferencesDialog(this);
+    preferencesDialog.init(m_song, m_settings, m_glWidget);
+    preferencesDialog.exec();
+
+    refreshTranslate();
+    m_score->refreshScroll();
+}
+
+void QtWindow::showSongDetailsDialog()
+{
+    GuiSongDetailsDialog songDetailsDialog(this);
+    songDetailsDialog.init(m_song, m_settings);
+    songDetailsDialog.exec();
+}
+
+void QtWindow::showKeyboardSetup()
+{
+    GuiKeyboardSetupDialog keyboardSetup(this);
+    keyboardSetup.init(m_song, m_settings);
+    keyboardSetup.exec();
+}
+
+void QtWindow::toggleSidePanel()
+{
+    m_sidePanel->setVisible(m_sidePanelStateAct->isChecked());
+}
+
+void QtWindow::onViewPianoKeyboard()
+{
+    if (m_viewPianoKeyboard->isChecked()) {
+        m_settings->setValue("View/PianoKeyboard", "on");
+    } else {
+        m_settings->setValue("View/PianoKeyboard", "off");
+    }
+}
+
+void QtWindow::onFullScreenStateAct ()
+{
+    if (m_fullScreenStateAct->isChecked())
+        showFullScreen();
+    else
+        showNormal();
+}
+
+void QtWindow::enableFollowTempo()
+{
+    CTempo::enableFollowTempo(Cfg::experimentalTempo);
+}
+void QtWindow::disableFollowTempo()
+{
+    CTempo::enableFollowTempo(false);
+}
+
+void QtWindow::on_rightHand()  { m_sidePanel->setActiveHand(PB_PART_right); }
+void QtWindow::on_bothHands()  { m_sidePanel->setActiveHand(PB_PART_both); }
+void QtWindow::on_leftHand()   { m_sidePanel->setActiveHand(PB_PART_left); }
+void QtWindow::on_playFromStart()
+{
+    if (m_song->playingMusic())
+        m_topBar->on_playButton_clicked(true); // Stop the music first if playing
+    else
+        m_topBar->on_playFromStartButton_clicked(true);
+}
+
+void QtWindow::on_playPause()   { m_topBar->on_playButton_clicked(true); }
+void QtWindow::on_faster()   {
+    float speed = m_song->getSpeed() + 0.04f;
+    m_song->setSpeed(speed);
+    speed = m_song->getSpeed();
+    m_topBar->setSpeed(static_cast<int>(speed * 100.0f + 0.5f));
+}
+void QtWindow::on_slower()   {
+    float speed = m_song->getSpeed() - 0.04f;
+    m_song->setSpeed(speed);
+    speed = m_song->getSpeed();
+    m_topBar->setSpeed(static_cast<int>(speed * 100.0f + 0.5f));
+}
+void QtWindow::on_nextSong()   { m_sidePanel->nextSong(+1); }
+void QtWindow::on_previousSong()   { m_sidePanel->nextSong(-1); }
+void QtWindow::on_nextBook()   { m_sidePanel->nextBook(+1); }
+void QtWindow::on_previousBook()   { m_sidePanel->nextBook(-1); }
+
 ///////////////////////////////////////////////////////////////////////////////
 //! @brief               Displays the usage
 void QtWindow::displayUsage()
 {
-    fprintf(stdout, "Usage: pianobooster [flags] [midifile]\n");
-    fprintf(stdout, "  -d, --debug             Increase the debug level.\n");
-    fprintf(stdout, "      --Xnote-length      Displays the note length (experimental)\n");
-    fprintf(stdout, "  -h, --help              Displays this help message.\n");
-    fprintf(stdout, "  -v, --version           Displays version number and then exits.\n");
-    fprintf(stdout, "  -l   --log              Write debug info to the \"pb.log\" log file.\n");
-    fprintf(stdout, "       --midi-input-dump  Displays the midi input in hex.\n");
-    fprintf(stdout, "       --lights           Turns on the keyboard lights.\n");
+    static const char *usageLines[] = {
+        "Usage: pianobooster [flags] [midifile]\n",
+        "  -d, --debug             Increase the debug level.\n",
+        "      --Xnote-length      Displays the note length (experimental)\n",
+        "  -h, --help              Displays this help message.\n",
+        "  -v, --version           Displays version number and then exits.\n",
+        "  -l   --log              Write debug info to the \"pb.log\" log file.\n",
+        "       --midi-input-dump  Displays the midi input in hex.\n",
+        "       --lights           Turns on the keyboard lights.\n"
+    };
+
+    for (const char *line : usageLines)
+        fputs(line, stdout);
 }
+
+namespace {
+bool parseIntegerParam(const QString &arg, int &value)
+{
+    const int equalsPos = arg.lastIndexOf('=');
+    if (equalsPos == -1 || (equalsPos + 1) >= arg.size())
+        return false;
+
+    bool ok = false;
+    value = arg.mid(equalsPos + 1).toInt(&ok);
+    return ok;
+}
+} // namespace
 
 int QtWindow::decodeIntegerParam(const QString &arg, int defaultParam)
 {
-    int n = arg.lastIndexOf('=');
-    if (n == -1 || (n + 1) >= arg.size())
+    int value = defaultParam;
+    if (!parseIntegerParam(arg, value))
         return defaultParam;
-    bool ok;
-    int value = arg.mid(n+1).toInt(&ok);
-    if (ok)
-        return value;
-    return defaultParam;
+    return value;
 }
 
 bool QtWindow::validateIntegerParam(const QString &arg)
 {
-    int n = arg.lastIndexOf('=');
-    if (n == -1 || (n + 1) >= arg.size())
-        return false;
-    bool ok;
-    arg.mid(n+1).toInt(&ok);
-     return ok;
+    int value = 0;
+    return parseIntegerParam(arg, value);
 }
 bool QtWindow::validateIntegerParamWithMessage(const QString &arg)
 {
@@ -212,101 +379,121 @@ void QtWindow::decodeMidiFileArg(const QString &arg)
 
     QFileInfo fileInfo(arg);
 
-    if (!fileInfo.exists() )
+    if (!fileInfo.exists())
     {
         QMessageBox::warning(nullptr, tr("PianoBooster MIDI File Error"),
                  tr("Cannot open \"%1\"").arg(QString(fileInfo.absoluteFilePath())));
         exit(1);
     }
-        else if ( !(fileInfo.fileName().endsWith(".mid", Qt::CaseInsensitive ) ||
-             fileInfo.fileName().endsWith(".midi", Qt::CaseInsensitive ) ||
-             fileInfo.fileName().endsWith(".kar", Qt::CaseInsensitive )) )
+
+    const QString fileName = fileInfo.fileName();
+    const bool isMidiFile = fileName.endsWith(".mid", Qt::CaseInsensitive) ||
+             fileName.endsWith(".midi", Qt::CaseInsensitive) ||
+             fileName.endsWith(".kar", Qt::CaseInsensitive);
+    if (!isMidiFile)
     {
         QMessageBox::warning(nullptr, tr("PianoBooster MIDI File Error"),
-                 tr("\"%1\" is not a MIDI File").arg(QString(fileInfo.fileName())));
+                 tr("\"%1\" is not a MIDI File").arg(QString(fileName)));
         exit(1);
     }
+
+    bool vaildMidiFile = true;
+    QFile file(fileInfo.absoluteFilePath());
+    if (!file.open(QIODevice::ReadOnly))
+        vaildMidiFile = false;
     else
     {
-        bool vaildMidiFile = true;
-        QFile file(fileInfo.absoluteFilePath());
-        if (!file.open(QIODevice::ReadOnly))
-            vaildMidiFile = false;
-        else
+        QByteArray bytes = file.read(4);
+        for (int i = 0; i < 4; i++)
         {
-            QByteArray bytes = file.read(4);
-            for (int i = 0; i < 4; i++)
-            {
-                if (bytes[i] !="MThd"[i] )
-                    vaildMidiFile = false;
-            }
-            file.close();
+            if (bytes[i] !="MThd"[i] )
+                vaildMidiFile = false;
         }
-        if (vaildMidiFile ==  true)
-            m_settings->setValue("CurrentSong", fileInfo.absoluteFilePath());
-        else
-        {
-            QMessageBox::warning(nullptr, tr("PianoBooster MIDI File Error"),
-                 tr("\"%1\" is not a valid MIDI file").arg(QString(fileInfo.absoluteFilePath())));
-            exit(1);
-        }
+        file.close();
     }
+    if (vaildMidiFile ==  true)
+    {
+        m_settings->setValue("CurrentSong", fileInfo.absoluteFilePath());
+        return;
+    }
+
+    QMessageBox::warning(nullptr, tr("PianoBooster MIDI File Error"),
+             tr("\"%1\" is not a valid MIDI file").arg(QString(fileInfo.absoluteFilePath())));
+    exit(1);
 }
 
 void QtWindow::decodeCommandLine()
 {
     bool hasMidiFile = false;
-    QStringList argList = QCoreApplication::arguments();
-    QString arg;
-    for (int i = 0; i < argList.size(); ++i)
+    const QStringList argList = QCoreApplication::arguments();
+    for (int i = 1; i < argList.size(); ++i)
     {
-        arg = argList[i];
-        if (arg.startsWith("-"))
+        const QString &arg = argList.at(i);
+        if (!arg.startsWith("-"))
         {
-            if (arg.startsWith("-d") || arg.startsWith("--debug"))
-                Cfg::logLevel++;
-            else if (arg.startsWith("--Xnote-length"))
-                Cfg::experimentalNoteLength = true;
-            else if (arg.startsWith("--Xtick-rate")) {
-                if (validateIntegerParamWithMessage(arg)) {
-                    Cfg::tickRate = decodeIntegerParam(arg, 12);
-                }
-            } else if (arg.startsWith("-l") || arg.startsWith("--log"))
-                Cfg::useLogFile = true;
-            else if (arg.startsWith("--midi-input-dump"))
-                Cfg::midiInputDump = true;
-            else if (arg.startsWith("-X1"))
-                Cfg::experimentalTempo = true;
-            else if (arg.startsWith("-Xswap"))
-                Cfg::experimentalSwapInterval = decodeIntegerParam(arg, 100);
-
-            else if (arg.startsWith("--lights"))
-                Cfg::keyboardLightsChan = 1-1;  // Channel 1 (really a zero)
-
-            else if (arg.startsWith("-h") || arg.startsWith("-?") || arg.startsWith("--help"))
-            {
-                displayUsage();
-                exit(0);
-            }
-            else if (arg.startsWith("-v") || arg.startsWith("--version"))
-            {
-                fprintf(stdout, "pianobooster Version " PB_VERSION"\n");
-                exit(0);
-            }
-            else
-            {
-                fprintf(stderr, "ERROR: Unknown arguments.\n");
-                displayUsage();
-                exit(0);
-            }
-        }
-        else {
-            if ( hasMidiFile == false && i > 0)
+            if (!hasMidiFile)
             {
                 hasMidiFile = true;
                 decodeMidiFileArg(arg);
             }
+            continue;
         }
+
+        if (arg.startsWith("-d") || arg.startsWith("--debug"))
+        {
+            Cfg::logLevel++;
+            continue;
+        }
+        if (arg.startsWith("--Xnote-length"))
+        {
+            Cfg::experimentalNoteLength = true;
+            continue;
+        }
+        if (arg.startsWith("--Xtick-rate")) {
+            if (validateIntegerParamWithMessage(arg)) {
+                Cfg::tickRate = decodeIntegerParam(arg, 12);
+            }
+            continue;
+        }
+        if (arg.startsWith("-l") || arg.startsWith("--log"))
+        {
+            Cfg::useLogFile = true;
+            continue;
+        }
+        if (arg.startsWith("--midi-input-dump"))
+        {
+            Cfg::midiInputDump = true;
+            continue;
+        }
+        if (arg.startsWith("-X1"))
+        {
+            Cfg::experimentalTempo = true;
+            continue;
+        }
+        if (arg.startsWith("-Xswap"))
+        {
+            Cfg::experimentalSwapInterval = decodeIntegerParam(arg, 100);
+            continue;
+        }
+        if (arg.startsWith("--lights"))
+        {
+            Cfg::keyboardLightsChan = 1 - 1;  // Channel 1 (really a zero)
+            continue;
+        }
+        if (arg.startsWith("-h") || arg.startsWith("-?") || arg.startsWith("--help"))
+        {
+            displayUsage();
+            exit(0);
+        }
+        if (arg.startsWith("-v") || arg.startsWith("--version"))
+        {
+            fprintf(stdout, "pianobooster Version " PB_VERSION"\n");
+            exit(0);
+        }
+
+        fprintf(stderr, "ERROR: Unknown arguments.\n");
+        displayUsage();
+        exit(0);
     }
 }
 
@@ -323,43 +510,43 @@ void QtWindow::createActions()
     m_openAct = new QAction(QIcon(":/images/open.png"), tr("&Open..."), this);
     m_openAct->setShortcut(tr("Ctrl+O"));
     m_openAct->setToolTip(tr("Open an existing file"));
-    connect(m_openAct, SIGNAL(triggered()), this, SLOT(open()));
+    connect(m_openAct, &QAction::triggered, this, &QtWindow::open);
 
     m_exitAct = new QAction(tr("E&xit"), this);
     m_exitAct->setShortcut(tr("Ctrl+Q"));
     m_exitAct->setToolTip(tr("Exit the application"));
-    connect(m_exitAct, SIGNAL(triggered()), this, SLOT(close()));
+    connect(m_exitAct, &QAction::triggered, this, &QWidget::close);
 
     m_aboutAct = new QAction(tr("&About"), this);
     m_aboutAct->setToolTip(tr("Show the application's About box"));
-    connect(m_aboutAct, SIGNAL(triggered()), this, SLOT(about()));
+    connect(m_aboutAct, &QAction::triggered, this, &QtWindow::about);
 
     m_shortcutAct = new QAction(tr("&PC Shortcut Keys"), this);
     m_shortcutAct->setToolTip(tr("The PC Keyboard shortcut keys"));
-    connect(m_shortcutAct, SIGNAL(triggered()), this, SLOT(keyboardShortcuts()));
+    connect(m_shortcutAct, &QAction::triggered, this, &QtWindow::keyboardShortcuts);
 
     m_setupMidiAct = new QAction(tr("&MIDI Setup ..."), this);
     m_setupMidiAct->setShortcut(tr("Ctrl+S"));
     m_setupMidiAct->setToolTip(tr("Setup the MIDI input and output"));
-    connect(m_setupMidiAct, SIGNAL(triggered()), this, SLOT(showMidiSetup()));
+    connect(m_setupMidiAct, &QAction::triggered, this, &QtWindow::showMidiSetup);
 
     m_setupKeyboardAct = new QAction(tr("Piano &Keyboard Setting ..."), this);
     m_setupKeyboardAct->setShortcut(tr("Ctrl+K"));
     m_setupKeyboardAct->setToolTip(tr("Change the piano keyboard settings"));
-    connect(m_setupKeyboardAct, SIGNAL(triggered()), this, SLOT(showKeyboardSetup()));
+    connect(m_setupKeyboardAct, &QAction::triggered, this, &QtWindow::showKeyboardSetup);
 
     m_fullScreenStateAct = new QAction(tr("&Fullscreen"), this);
     m_fullScreenStateAct->setToolTip(tr("Fullscreen mode"));
     m_fullScreenStateAct->setShortcut(tr("F11"));
     m_fullScreenStateAct->setCheckable(true);
-    connect(m_fullScreenStateAct, SIGNAL(triggered()), this, SLOT(onFullScreenStateAct()));
+    connect(m_fullScreenStateAct, &QAction::triggered, this, &QtWindow::onFullScreenStateAct);
 
     m_sidePanelStateAct = new QAction(tr("&Show the Side Panel"), this);
     m_sidePanelStateAct->setToolTip(tr("Show the Left Side Panel"));
     m_sidePanelStateAct->setShortcut(tr("F12"));
     m_sidePanelStateAct->setCheckable(true);
     m_sidePanelStateAct->setChecked(true);
-    connect(m_sidePanelStateAct, SIGNAL(triggered()), this, SLOT(toggleSidePanel()));
+    connect(m_sidePanelStateAct, &QAction::triggered, this, &QtWindow::toggleSidePanel);
 
     m_viewPianoKeyboard = new QAction(tr("Show Piano &Keyboard"), this);
     m_viewPianoKeyboard->setToolTip(tr("Show Piano Keyboard Widget"));
@@ -368,26 +555,26 @@ void QtWindow::createActions()
     if (m_settings->value("View/PianoKeyboard").toString()=="on"){
         m_viewPianoKeyboard->setChecked(true);
     }
-    connect(m_viewPianoKeyboard, SIGNAL(triggered()), this, SLOT(onViewPianoKeyboard()));
+    connect(m_viewPianoKeyboard, &QAction::triggered, this, &QtWindow::onViewPianoKeyboard);
 
     m_setupPreferencesAct = new QAction(tr("&Preferences ..."), this);
     m_setupPreferencesAct->setToolTip(tr("Settings"));
     m_setupPreferencesAct->setShortcut(tr("Ctrl+P"));
-    connect(m_setupPreferencesAct, SIGNAL(triggered()), this, SLOT(showPreferencesDialog()));
+    connect(m_setupPreferencesAct, &QAction::triggered, this, &QtWindow::showPreferencesDialog);
 
     m_songDetailsAct = new QAction(tr("Song &Details ..."), this);
     m_songDetailsAct->setToolTip(tr("Song Settings"));
     m_songDetailsAct->setShortcut(tr("Ctrl+D"));
-    connect(m_songDetailsAct, SIGNAL(triggered()), this, SLOT(showSongDetailsDialog()));
+    connect(m_songDetailsAct, &QAction::triggered, this, &QtWindow::showSongDetailsDialog);
 
     QAction* act = new QAction(this);
     act->setShortcut(tr("Shift+F1"));
-    connect(act, SIGNAL(triggered()), this, SLOT(enableFollowTempo()));
+    connect(act, &QAction::triggered, this, &QtWindow::enableFollowTempo);
     addAction(act);
 
     act = new QAction(this);
     act->setShortcut(tr("Alt+F1"));
-    connect(act, SIGNAL(triggered()), this, SLOT(disableFollowTempo()));
+    connect(act, &QAction::triggered, this, &QtWindow::disableFollowTempo);
     addAction(act);
 
     addShortcutAction("ShortCuts/RightHand",        SLOT(on_rightHand()));
@@ -405,8 +592,7 @@ void QtWindow::createActions()
      for (int i = 0; i < maxRecentFiles(); ++i) {
          m_recentFileActs[i] = new QAction(this);
          m_recentFileActs[i]->setVisible(false);
-         connect(m_recentFileActs[i], SIGNAL(triggered()),
-                 this, SLOT(openRecentFile()));
+         connect(m_recentFileActs[i], &QAction::triggered, this, &QtWindow::openRecentFile);
      }
 }
 
@@ -444,12 +630,12 @@ void QtWindow::createMenus()
     QAction* act;
     act = new QAction(tr("&Help"), this);
     act->setToolTip(tr("Piano Booster Help"));
-    connect(act, SIGNAL(triggered()), this, SLOT(help()));
+    connect(act, &QAction::triggered, this, &QtWindow::help);
     m_helpMenu->addAction(act);
 
     act = new QAction(tr("&Website"), this);
     act->setToolTip(tr("Piano Booster Website"));
-    connect(act, SIGNAL(triggered()), this, SLOT(website()));
+    connect(act, &QAction::triggered, this, &QtWindow::website);
     m_helpMenu->addAction(act);
 
     m_helpMenu->addAction(m_shortcutAct);
@@ -684,31 +870,31 @@ void QtWindow::closeEvent(QCloseEvent *event)
     writeSettings();
 }
 
-void QtWindow::keyPressEvent ( QKeyEvent * event )
+void QtWindow::keyPressEvent(QKeyEvent *event)
 {
-    if (event->text().length() == 0)
+    if (event->text().isEmpty())
         return;
 
-    if (event->isAutoRepeat() == true)
+    if (event->isAutoRepeat())
         return;
 
     if (event->key() == Qt::Key_F1)
         return;
 
     int c = event->text().toLatin1().at(0);
-    m_song->pcKeyPress( c, true);
+    m_song->pcKeyPress(c, true);
 }
 
-void QtWindow::keyReleaseEvent ( QKeyEvent * event )
+void QtWindow::keyReleaseEvent(QKeyEvent *event)
 {
-    if (event->isAutoRepeat() == true)
+    if (event->isAutoRepeat())
         return;
 
-    if (event->text().length() == 0)
+    if (event->text().isEmpty())
         return;
 
     int c = event->text().toLatin1().at(0);
-    m_song->pcKeyPress( c, false);
+    m_song->pcKeyPress(c, false);
 }
 
 void QtWindow::loadTutorHtml(const QString & name)

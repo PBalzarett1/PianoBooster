@@ -41,6 +41,7 @@ class QtWindow;
 /// Save all the settings for the programme in the right place.
 class CSettings : public QSettings
 {
+    Q_OBJECT
 
 public:
     CSettings(QtWindow *mainWindow);
@@ -149,7 +150,7 @@ public:
     void updateWarningMessages();
 
     QString selectedLangauge() {
-        QString locale = value("General/lang","").toString();
+        QString locale = value(QStringLiteral("General/lang"), QString()).toString();
         if (locale.isEmpty()) {
             locale = QLocale::system().bcp47Name();
             int n = locale.indexOf("_");
@@ -161,8 +162,6 @@ public:
     }
 
 private:
-
-    Q_OBJECT
     QDomElement openDomElement(QDomElement parent, const QString & elementName, const QString & attributeName = QString());
     void loadHandSettings();
     void saveHandSettings();
@@ -181,10 +180,10 @@ private:
     const QString partToHandString(whichPart_t part)
     {
         if (part == PB_PART_left)
-            return "left";
+            return QStringLiteral("left");
         else if (part == PB_PART_right)
-            return "right";
-        return "both";
+            return QStringLiteral("right");
+        return QStringLiteral("both");
     }
 
     QDomDocument m_domDocument; //  The Complete XML DOM document for one book

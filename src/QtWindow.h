@@ -27,25 +27,24 @@
 #ifndef __QT_WINDOW_H__
 #define __QT_WINDOW_H__
 
-#include <QtWidgets>
+#include <QMainWindow>
+#include <QMap>
+#include <QTranslator>
+#include <QString>
 
 #include "Song.h"
-#include "Score.h"
-#include "GuiMidiSetupDialog.h"
-#include "GuiKeyboardSetupDialog.h"
-#include "GuiSidePanel.h"
-#include "GuiTopBar.h"
-#include "GuiPreferencesDialog.h"
-#include "GuiSongDetailsDialog.h"
-#include "GuiLoopingPopup.h"
-#include "Settings.h"
 
-class CGLView;
 class QAction;
+class CGLView;
+class QCloseEvent;
+class QKeyEvent;
 class QMenu;
+class QWidget;
 
-class QSlider;
-class QPushButton;
+class CSettings;
+class CScore;
+class GuiSidePanel;
+class GuiTopBar;
 class QTextBrowser;
 
 static constexpr int maxRecentFiles() { return 20; }
@@ -56,24 +55,11 @@ class QtWindow : public QMainWindow
 
 public:
     QtWindow();
-    ~QtWindow();
+    ~QtWindow() override;
 
     void init();
 
-    void songEventUpdated(eventBits_t eventBits)
-    {
-        if ((eventBits & EVENT_BITS_playingStopped) != 0){
-            if (m_sidePanel->isRepeatSong()){
-                m_topBar->on_playFromStartButton_clicked(true);
-            }else{
-                m_topBar->setPlayButtonState(false, true);
-            }
-        }
-        if ((eventBits & EVENT_BITS_loadSong) != 0){
-            m_topBar->setPlayButtonState(false, true);
-        }
-    }
-
+    void songEventUpdated(eventBits_t eventBits);
     void loadTutorHtml(const QString & name);
     void setCurrentFile(const QString &fileName);
 
@@ -87,91 +73,36 @@ private slots:
 
     void showMidiSetup();
 
-    void showPreferencesDialog()
-    {
-        GuiPreferencesDialog preferencesDialog(this);
-        preferencesDialog.init(m_song, m_settings, m_glWidget);
-        preferencesDialog.exec();
+    void showPreferencesDialog();
+    void showSongDetailsDialog();
+    void showKeyboardSetup();
 
-        refreshTranslate();
-        m_score->refreshScroll();
-    }
+    void toggleSidePanel();
 
-    void showSongDetailsDialog()
-    {
-        GuiSongDetailsDialog songDetailsDialog(this);
-        songDetailsDialog.init(m_song, m_settings);
-        songDetailsDialog.exec();
-    }
+    void onViewPianoKeyboard();
 
-    void showKeyboardSetup()
-    {
-        GuiKeyboardSetupDialog keyboardSetup(this);
-        keyboardSetup.init(m_song, m_settings);
-        keyboardSetup.exec();
-    }
+    void onFullScreenStateAct ();
 
-    void toggleSidePanel()
-    {
-        m_sidePanel->setVisible(m_sidePanelStateAct->isChecked());
-    }
+    void enableFollowTempo();
+    void disableFollowTempo();
 
-    void onViewPianoKeyboard(){
-        if (m_viewPianoKeyboard->isChecked()){
-            m_settings->setValue("View/PianoKeyboard","on");
-        }else{
-            m_settings->setValue("View/PianoKeyboard","off");
-        }
-    }
+    void on_rightHand();
+    void on_bothHands();
+    void on_leftHand();
+    void on_playFromStart();
 
-    void onFullScreenStateAct () {
-        if (m_fullScreenStateAct->isChecked())
-            showFullScreen();
-        else
-            showNormal();
-    }
-
-    void enableFollowTempo()
-    {
-        CTempo::enableFollowTempo(Cfg::experimentalTempo);
-    }
-    void disableFollowTempo()
-    {
-        CTempo::enableFollowTempo(false);
-    }
-
-    void on_rightHand()  {  m_sidePanel->setActiveHand(PB_PART_right); }
-    void on_bothHands()  {  m_sidePanel->setActiveHand(PB_PART_both); }
-    void on_leftHand()   {  m_sidePanel->setActiveHand(PB_PART_left); }
-    void on_playFromStart()   {
-        if(m_song->playingMusic())
-            m_topBar->on_playButton_clicked(true); // Stop the music first if playing
-        else
-            m_topBar->on_playFromStartButton_clicked(true);
-    }
-
-    void on_playPause()   {  m_topBar->on_playButton_clicked(true); }
-    void on_faster()   {
-        float speed = m_song->getSpeed() + 0.04f;
-        m_song->setSpeed(speed);
-        speed = m_song->getSpeed();
-        m_topBar->setSpeed(static_cast<int>(speed * 100.0f + 0.5f));
-    }
-    void on_slower()   {
-        float speed = m_song->getSpeed() - 0.04f;
-        m_song->setSpeed(speed);
-        speed = m_song->getSpeed();
-        m_topBar->setSpeed(static_cast<int>(speed * 100.0f + 0.5f));
-    }
-    void on_nextSong()   {  m_sidePanel->nextSong(+1); }
-    void on_previousSong()   {  m_sidePanel->nextSong(-1); }
-    void on_nextBook()   {  m_sidePanel->nextBook(+1); }
-    void on_previousBook()   {  m_sidePanel->nextBook(-1); }
+    void on_playPause();
+    void on_faster();
+    void on_slower();
+    void on_nextSong();
+    void on_previousSong();
+    void on_nextBook();
+    void on_previousBook();
 
 protected:
-    void closeEvent(QCloseEvent *event);
-    void keyPressEvent ( QKeyEvent * event );
-    void keyReleaseEvent ( QKeyEvent * event );
+    void closeEvent(QCloseEvent *event) override;
+    void keyPressEvent(QKeyEvent *event) override;
+    void keyReleaseEvent(QKeyEvent *event) override;
 
 private:
     void decodeCommandLine();

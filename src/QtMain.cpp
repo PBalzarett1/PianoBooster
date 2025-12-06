@@ -21,34 +21,31 @@
 
 #include <QApplication>
 
+#include <cstdio>
 #include <cstdlib>
 
 #include "QtWindow.h"
 #include "version.h"
 
-int main(int argc, char *argv[]){
-    QCoreApplication::setOrganizationName(QStringLiteral("PianoBooster"));
-    QCoreApplication::setOrganizationDomain(QStringLiteral("https://github.com/pianobooster/PianoBooster"));
-    QCoreApplication::setApplicationName(QStringLiteral("Piano Booster"));
-    QCoreApplication::setApplicationVersion(QStringLiteral(PB_VERSION));
+int main(int argc, char *argv[])
+{
+    QApplication app(argc, argv);
+    app.setOrganizationName(QStringLiteral("PianoBooster"));
+    app.setOrganizationDomain(QStringLiteral("https://github.com/pianobooster/PianoBooster"));
+    app.setApplicationName(QStringLiteral("Piano Booster"));
+    app.setApplicationVersion(QStringLiteral(PB_VERSION));
     QGuiApplication::setDesktopFileName(QStringLiteral("pianobooster"));
 
-    {
-        QCoreApplication app(argc, argv);
-        QStringList argList = QCoreApplication::arguments();
-        for (const QString &arg : argList){
-            if (arg == QLatin1String("--version")) {
-                fprintf(stdout, "pianobooster " PB_VERSION "\n");
-                return EXIT_SUCCESS;
-            }
-        }
+    const auto args = app.arguments();
+    if (args.contains(QStringLiteral("--version"))) {
+        std::printf("pianobooster " PB_VERSION "\n");
+        return EXIT_SUCCESS;
     }
 
-    QApplication app(argc, argv);
-    QtWindow window;
-    window.show();
+    QtWindow mainWindow;
+    mainWindow.show();
 
-    int value = app.exec();
+    const auto exitCode = app.exec();
     closeLogs();
-    return value;
+    return exitCode;
 }

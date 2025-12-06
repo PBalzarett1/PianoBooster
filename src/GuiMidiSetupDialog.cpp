@@ -6,7 +6,6 @@
     @author         L. J. Barman
 
     Copyright (c)   2008-2020, L. J. Barman and others, all rights reserved
-
     This file is part of the PianoBooster application
 
     PianoBooster is free software: you can redistribute it and/or modify
@@ -24,6 +23,8 @@
 
 */
 
+#include <QDebug>
+#include <QFileDialog>
 #include <QFileInfo>
 #include <QtWidgets>
 
@@ -35,12 +36,22 @@
 
 GuiMidiSetupDialog::GuiMidiSetupDialog(QWidget *parent)
     : QDialog(parent)
+    , m_song(nullptr)
+    , m_settings(nullptr)
+    , m_latencyFix(0)
+    , m_latencyChanged(false)
 {
-    m_song = nullptr;
-    m_settings = nullptr;
     setupUi(this);
-    m_latencyFix = 0;
-    m_latencyChanged = false;
+
+    if (auto loadButton = findChild<QPushButton*>(QStringLiteral("fluidLoadButton"))) {
+        connect(loadButton, &QPushButton::clicked,
+                this, &GuiMidiSetupDialog::on_fluidLoadButton_clicked);
+    }
+    if (auto clearButton = findChild<QPushButton*>(QStringLiteral("fluidClearButton"))) {
+        connect(clearButton, &QPushButton::clicked,
+                this, &GuiMidiSetupDialog::on_fluidClearButton_clicked);
+    }
+
     midiSetupTabWidget->setCurrentIndex(0);
 
 #ifndef WITH_INTERNAL_FLUIDSYNTH
@@ -93,7 +104,7 @@ void GuiMidiSetupDialog::init(CSong* song, CSettings* settings)
         masterGainSpin->setValue(m_settings->value("FluidSynth/masterGainSpin","40").toInt());
         reverbCheck->setChecked(m_settings->value("FluidSynth/reverbCheck","false").toBool());
         chorusCheck->setChecked(m_settings->value("FluidSynth/chorusCheck","false").toBool());
-        setComboFromSetting(audioDriverCombo, "FluidSynth/audioDriverCombo","pulseaudio");
+    setComboFromSetting(audioDriverCombo, "FluidSynth/audioDriverCombo","pulseaudio");
         setComboFromSetting(sampleRateCombo, "FluidSynth/sampleRateCombo","22050");
         setComboFromSetting(bufferSizeCombo, "FluidSynth/bufferSizeCombo","128");
         setComboFromSetting(bufferCountCombo, "FluidSynth/bufferCountCombo","4");
@@ -276,61 +287,77 @@ void GuiMidiSetupDialog::updateFluidInfoStatus()
     fluidSettingsGroupBox->setEnabled(fontLoaded);
 }
 
-void GuiMidiSetupDialog::on_fluidLoadButton_clicked ( bool checked )
+void GuiMidiSetupDialog::on_fluidLoadButton_clicked(bool checked)
 {
     Q_UNUSED(checked)
-#if WITH_INTERNAL_FLUIDSYNTH
-    QString lastSoundFont = m_settings->value("LastSoundFontDir","").toString();
+    qDebug() << "FluidSynth Load button clicked";
 
-     if (lastSoundFont.isEmpty()) {
-
+    QString lastSoundFont = m_settings->value(QStringLiteral("LastSoundFontDir"), QString()).toString();
+    if (lastSoundFont.isEmpty())
+    {
         lastSoundFont = QDir::homePath();
 
         QStringList possibleSoundFontFolders;
-#if defined (Q_OS_LINUX) || defined (Q_OS_UNIX)
-        possibleSoundFontFolders.push_back("/usr/share/soundfonts");
-        possibleSoundFontFolders.push_back("/usr/share/sounds/sf2");
+#if defined(Q_OS_LINUX) || defined(Q_OS_UNIX)
+        possibleSoundFontFolders.push_back(QStringLiteral("/usr/share/soundfonts"));
+        possibleSoundFontFolders.push_back(QStringLiteral("/usr/share/sounds/sf2"));
 #endif
-        for (const QString &soundFontFolder : possibleSoundFontFolders){
-            if (QDir(soundFontFolder).exists()){
-                lastSoundFont=soundFontFolder;
+        for (const QString &soundFontFolder : possibleSoundFontFolders)
+        {
+            if (QDir(soundFontFolder).exists())
+            {
+                lastSoundFont = soundFontFolder;
                 break;
             }
         }
     }
 
-    const auto soundFontFile = QFileDialog::getOpenFileName(this, tr("Open SoundFont File for fluidsynth"),
-                            lastSoundFont, tr("SoundFont Files (*.sf2 *.sf3)"));
-    if (soundFontFile.isEmpty()) return;
+    QFileDialog dialog(this, tr("Open SoundFont File for fluidsynth"), lastSoundFont,
+                       tr("SoundFont Files (*.sf2 *.sf3)"));
+    dialog.setFileMode(QFileDialog::ExistingFile);
+    dialog.setOption(QFileDialog::DontUseNativeDialog, true);
+    if (dialog.exec() != QDialog::Accepted) {
+        qDebug() << "FluidSynth: user cancelled dialog";
+        return;
+    }
+    const QStringList selectedFiles = dialog.selectedFiles();
+    if (selectedFiles.isEmpty()) {
+        qDebug() << "FluidSynth: no file selected";
+        return;
+    }
+    const QString soundFontFile = selectedFiles.first();
+    qDebug() << "FluidSynth: selected soundfont" << soundFontFile;
 
-    const auto soundFontInfo = QFileInfo(soundFontFile);
+    const QFileInfo soundFontInfo(soundFontFile);
     m_settings->setFluidSoundFontNames(soundFontInfo.filePath());
-    m_settings->setValue("LastSoundFontDir", soundFontInfo.path());
+    m_settings->setValue(QStringLiteral("LastSoundFontDir"), soundFontInfo.path());
 
+#ifdef WITH_INTERNAL_FLUIDSYNTH
     if (m_settings->isNewSoundFontEntered())
     {
         int i = midiOutputCombo->findText(CMidiDeviceFluidSynth::getFluidInternalName());
-        if (i==-1)
-           midiOutputCombo->addItem(CMidiDeviceFluidSynth::getFluidInternalName());
+        if (i == -1)
+            midiOutputCombo->addItem(CMidiDeviceFluidSynth::getFluidInternalName());
         i = midiOutputCombo->findText(CMidiDeviceFluidSynth::getFluidInternalName());
-        if (i!=-1)
+        if (i != -1)
             midiOutputCombo->setCurrentIndex(i);
     }
+#endif
+
     updateFluidInfoStatus();
     updateMidiInfoText();
-#endif
 }
 
 void GuiMidiSetupDialog::on_fluidClearButton_clicked( bool checked ){
     Q_UNUSED(checked)
-#if WITH_INTERNAL_FLUIDSYNTH
     m_settings->clearFluidSoundFontNames();
+#if WITH_INTERNAL_FLUIDSYNTH
     int i = midiOutputCombo->findText(CMidiDeviceFluidSynth::getFluidInternalName());
     if (i>=0)
     {
        midiOutputCombo->removeItem(i);
        midiOutputCombo->setCurrentIndex(0);
     }
-    updateFluidInfoStatus();
 #endif
+    updateFluidInfoStatus();
 }
