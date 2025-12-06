@@ -223,6 +223,8 @@ QtWindow::~QtWindow()
 
 void QtWindow::songEventUpdated(eventBits_t eventBits)
 {
+    m_topBar->updateTempoDisplay();
+
     if ((eventBits & EVENT_BITS_playingStopped) != 0) {
         if (m_sidePanel->isRepeatSong()) {
             m_topBar->on_playFromStartButton_clicked(true);

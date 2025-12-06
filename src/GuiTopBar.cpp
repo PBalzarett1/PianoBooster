@@ -37,6 +37,7 @@ GuiTopBar::GuiTopBar(QWidget *parent, CSettings* settings)
 {
 
     m_atTheEndOfTheSong = false;
+    m_updatingTempoUi = false;
     m_song = nullptr;
     setupUi(this);
 
@@ -61,6 +62,7 @@ void GuiTopBar::init(CSong* songObj)
 {
     m_song = songObj;
     reloadKeyCombo(true);
+    syncTempoWidgets();
 }
 
 void GuiTopBar::refresh(bool reset)
@@ -77,7 +79,7 @@ void GuiTopBar::refresh(bool reset)
         index = CStavePos::getKeySignature() + 6;
     if (index >= 0 && index < keyCombo->count())
         keyCombo->setCurrentIndex(index);
-
+    syncTempoWidgets();
 }
 
 void GuiTopBar::reloadKeyCombo(bool major)
@@ -116,6 +118,11 @@ void GuiTopBar::reloadKeyCombo(bool major)
         keyCombo->addItem(tr("D#"));
     }
     refresh(false);
+}
+
+void GuiTopBar::updateTempoDisplay()
+{
+    syncTempoWidgets();
 }
 
 void GuiTopBar::on_keyCombo_activated(int index)
@@ -204,6 +211,7 @@ void GuiTopBar::updateTranslate(){
     majorCombo->setSizeAdjustPolicy(QComboBox::AdjustToContentsOnFirstShow);
 
     retranslateUi(this);
+    syncTempoWidgets();
 }
 
 void GuiTopBar::on_playButton_clicked(bool clicked)
@@ -233,7 +241,11 @@ void GuiTopBar::on_playFromStartButton_clicked(bool clicked)
 void GuiTopBar::on_speedSpin_valueChanged(int speed)
 {
     if (!m_song) return;
+    if (m_updatingTempoUi)
+        return;
+
     m_song->setSpeed(static_cast<float>(speed) / 100.0f);
+    syncTempoWidgets();
 }
 
 void GuiTopBar::on_startBarSpin_valueChanged(double bar)
@@ -243,6 +255,16 @@ void GuiTopBar::on_startBarSpin_valueChanged(double bar)
     stopMuiscPlaying();
 
     m_song->setPlayFromBar( bar);
+}
+
+void GuiTopBar::on_tempoSpin_valueChanged(int bpm)
+{
+    if (!m_song) return;
+    if (m_updatingTempoUi)
+        return;
+
+    m_song->setEffectiveBpm(static_cast<double>(bpm));
+    syncTempoWidgets();
 }
 
 // Stop the muisc playing
@@ -297,4 +319,33 @@ bool GuiTopBar::eventFilter(QObject *obj, QEvent *event)
         // it's not a key event, lets do standard event processing
         return QObject::eventFilter(obj, event);
     }
+}
+
+void GuiTopBar::syncTempoWidgets()
+{
+    if (!m_song)
+        return;
+
+    if (m_updatingTempoUi)
+        return;
+    m_updatingTempoUi = true;
+
+    const double effectiveBpm = m_song->getEffectiveBpm();
+    const double baseBpm = m_song->getBaseBpm();
+
+    if (tempoSpin)
+    {
+        int bpmValue = static_cast<int>(effectiveBpm + 0.5);
+        bpmValue = qBound(tempoSpin->minimum(), bpmValue, tempoSpin->maximum());
+        tempoSpin->setValue(bpmValue);
+    }
+
+    if (speedSpin && baseBpm > 0.0)
+    {
+        int speedPercent = static_cast<int>((effectiveBpm / baseBpm) * 100.0 + 0.5);
+        speedPercent = qBound(speedSpin->minimum(), speedPercent, speedSpin->maximum());
+        speedSpin->setValue(speedPercent);
+    }
+
+    m_updatingTempoUi = false;
 }

@@ -103,10 +103,20 @@ public:
     void reconnectMidi();
 
     float getSpeed() {return m_tempo.getSpeed();}
+    double getBaseBpm() const { return m_tempo.getBaseBpm(); }
+    double getEffectiveBpm() const { return m_tempo.getEffectiveBpm(); }
     void setSpeed(float speed)
     {
         m_tempo.setSpeed(speed);
         m_leadLagAdjust = m_tempo.mSecToTicks( -getLatencyFix() );
+    }
+    void setEffectiveBpm(double bpm)
+    {
+        const double baseBpm = m_tempo.getBaseBpm();
+        if (baseBpm <= 0.0)
+            return;
+        const float speed = static_cast<float>(bpm / baseBpm);
+        setSpeed(speed);
     }
     void setLatencyFix(int latencyFix)
     {

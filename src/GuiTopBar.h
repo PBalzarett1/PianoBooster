@@ -49,6 +49,7 @@ public:
     void refresh(bool reset);
 
     void setPlayButtonState(bool checked, bool atTheEnd = false);
+    void updateTempoDisplay();
 
     void setSpeed(int value){ speedSpin->setValue(value); }
     int getSpeed(){return speedSpin->value();}
@@ -65,6 +66,7 @@ private slots:
 
     void on_transposeSpin_valueChanged(int value);
     void on_keyCombo_activated(int index);
+    void on_tempoSpin_valueChanged(int bpm);
 
     void on_majorCombo_activated(int index)
     {
@@ -77,6 +79,7 @@ private slots:
 private:
     bool eventFilter(QObject *obj, QEvent *event);
     void reloadKeyCombo(bool major);
+    void syncTempoWidgets();
 
     CSong* m_song;
     CSettings* m_settings;
@@ -85,6 +88,7 @@ private:
     QMap<QAction*,QMap<QString,QString>> listActionsRetranslateUi;
 
     bool m_atTheEndOfTheSong;
+    bool m_updatingTempoUi;
 };
 
 #endif //__GUITOPBAR_H__

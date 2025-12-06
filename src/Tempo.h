@@ -73,6 +73,31 @@ public:
         m_userSpeed = speed;
     }
     float getSpeed() {return m_userSpeed;}
+    double getBaseBpm() const
+    {
+        if (m_midiTempo <= 0.0f)
+            return 0.0f;
+        const double tempoUSecPerQuarter = (static_cast<double>(m_midiTempo) * static_cast<double>(CMidiFile::getPulsesPerQuarterNote())) /
+                                          static_cast<double>(DEFAULT_PPQN);
+        if (tempoUSecPerQuarter <= 0.0f)
+            return 0.0f;
+        return (60.0 * MICRO_SECOND) / tempoUSecPerQuarter;
+    }
+    double getEffectiveBpm() const
+    {
+        const double baseBpm = getBaseBpm();
+        if (baseBpm <= 0.0)
+            return 0.0;
+        return baseBpm * static_cast<double>(m_userSpeed);
+    }
+    void setEffectiveBpm(double bpm)
+    {
+        const double baseBpm = getBaseBpm();
+        if (baseBpm <= 0.0)
+            return;
+        const double speed = bpm / baseBpm;
+        setSpeed(static_cast<float>(speed));
+    }
 
     qint64 mSecToTicks(qint64 mSec)
     {

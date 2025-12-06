@@ -106,6 +106,29 @@
       <widget class="QSpinBox" name="speedSpin"/>
      </item>
      <item>
+      <widget class="QLabel" name="tempoTextLabel">
+       <property name="text">
+        <string>Tempo:</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QSpinBox" name="tempoSpin">
+       <property name="suffix">
+        <string> BPM</string>
+       </property>
+       <property name="minimum">
+        <number>30</number>
+       </property>
+       <property name="maximum">
+        <number>300</number>
+       </property>
+       <property name="value">
+        <number>120</number>
+       </property>
+      </widget>
+     </item>
+     <item>
       <widget class="QLabel" name="label_5">
        <property name="text">
         <string>Key:</string>
