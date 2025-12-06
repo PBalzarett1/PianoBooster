@@ -44,15 +44,7 @@ using namespace std;
 class CMidiFile : public CMerge
 {
 public:
-    CMidiFile()
-    {
-        midiError(SMF_NO_ERROR);
-        m_ppqn = DEFAULT_PPQN;
-        setSize(MAX_TRACKS);
-        for (int i = 0; i < arraySize(m_tracks); i++)
-            m_tracks[i] = 0;
-        m_numberOfTracks = 0;
-    }
+    CMidiFile();
 
     void openMidiFile(const std::string &filename);
     int readWord(void);
@@ -72,6 +64,7 @@ private:
     bool checkMidiEventFromStream(int streamIdx);
     CMidiEvent fetchMidiEventFromStream(int streamIdx);
     void midiError(midiErrors_t error) {m_midiError = error;}
+    void resetTracks();
     fstream m_file;
     static int m_ppqn;
     midiErrors_t m_midiError;
@@ -81,4 +74,3 @@ private:
 };
 
 #endif // __MIDIFILE_H__
-

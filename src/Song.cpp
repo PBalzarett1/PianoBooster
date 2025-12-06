@@ -28,6 +28,32 @@
 
 #include "Song.h"
 #include "Score.h"
+#include "TrackList.h"
+#include "MidiFile.h"
+
+CSong::CSong()
+    : m_midiFile(new CMidiFile),
+      m_findChord(),
+      m_reachedMidiEof(false),
+      m_fakeChord(),
+      m_trackList(new CTrackList),
+      m_songTitle()
+{
+    CStavePos::setKeySignature(NOT_USED, 0);
+    reset();
+}
+
+CSong::~CSong()
+{
+    delete m_midiFile;
+    delete m_trackList;
+}
+
+void CSong::reset()
+{
+    m_reachedMidiEof = false;
+    m_findChord.reset();
+}
 
 void CSong::init2(CScore * scoreWin, CSettings* settings)
 {
@@ -133,22 +159,15 @@ void  CSong::setPlayMode(playMode_t mode)
 
 void CSong::regenerateChordQueue()
 {
-    int i;
-    int length;
-    CMidiEvent event;
-
     m_wantedChordQueue->clear();
     m_findChord.reset();
 
-    length = m_songEventQueue->length();
+    const int length = m_songEventQueue->length();
 
-    for (i = 0; i < length; i++)
+    for (int i = 0; i < length; i++)
     {
-        event = m_songEventQueue->index(i);
-        // Find the next chord
-        if (m_findChord.findChord(event, getActiveChannel(), PB_PART_both) == true)
-            chordEventInsert( m_findChord.getChord() ); // give the Conductor the chord event
-
+        const CMidiEvent event = m_songEventQueue->index(i);
+        insertChordIfFound(event);
     }
     resetWantedChord();
 }
@@ -183,9 +202,7 @@ eventBits_t CSong::task(qint64 ticks)
 
             //ppLogTrace("Song event delta %d type 0x%x chan %d Note %d", event.deltaTime(), event.type(), event.channel(), event.note());
 
-            // Find the next chord
-            if (m_findChord.findChord(event, getActiveChannel(), PB_PART_both) == true)
-                chordEventInsert( m_findChord.getChord() ); // give the Conductor the chord event
+            insertChordIfFound(event);
 
             // send the events to the other end
             m_scoreWin->midiEventInsert(event);
@@ -246,7 +263,6 @@ static const struct pcNote_s
 bool CSong::pcKeyPress(int key, bool down)
 {
     int i;
-    size_t j;
     CMidiEvent midi;
     const int cfg_pcKeyVolume = 64;
     const int cfg_pcKeyChannel = 1-1;
@@ -266,14 +282,14 @@ bool CSong::pcKeyPress(int key, bool down)
         return true;
     }
 
-    for (j = 0; j < arraySize(pcNoteLookup); j++)
+    for (const auto &pcNote : pcNoteLookup)
     {
-        if ( key==pcNoteLookup[j].key)
+        if (key == pcNote.key)
         {
             if (down)
-                midi.noteOnEvent(0, cfg_pcKeyChannel, pcNoteLookup[j].note, cfg_pcKeyVolume);
+                midi.noteOnEvent(0, cfg_pcKeyChannel, pcNote.note, cfg_pcKeyVolume);
             else
-                midi.noteOffEvent(0, cfg_pcKeyChannel, pcNoteLookup[j].note, cfg_pcKeyVolume);
+                midi.noteOffEvent(0, cfg_pcKeyChannel, pcNote.note, cfg_pcKeyVolume);
 
             expandPianistInput(midi);
             return true;
@@ -283,3 +299,8 @@ bool CSong::pcKeyPress(int key, bool down)
     return false;
 }
 
+void CSong::insertChordIfFound(const CMidiEvent &event)
+{
+    if (m_findChord.findChord(event, getActiveChannel(), PB_PART_both) == true)
+        chordEventInsert(m_findChord.getChord()); // give the Conductor the chord event
+}

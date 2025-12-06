@@ -27,10 +27,12 @@
 /*********************************************************************************/
 
 #include <QtGui>
+#include <algorithm>
 
+#include <QListWidgetItem>
 #include "TrackList.h"
-#include "Song.h"
 #include "Settings.h"
+#include "Song.h"
 
 void CTrackList::init(CSong* songObj, CSettings* settings)
 {
@@ -42,18 +44,15 @@ void CTrackList::reset(int numberOfTracks)
 {
     m_partsList.clear();
     m_midiChannels.clear();
-    for (int chan = 0; chan < MAX_MIDI_CHANNELS; chan++) {
-        for (int i = 0; i < MAX_MIDI_NOTES; i++) {
-            m_noteFrequency[chan][i]=0;
-        }
+    for (int chan = 0; chan < MAX_MIDI_CHANNELS; ++chan) {
+        std::fill_n(m_noteFrequency[chan], MAX_MIDI_NOTES, 0);
         m_midiChannels.append(AnalyseItem(numberOfTracks));
     }
 }
 
 void CTrackList::currentRowChanged(int currentRow)
 {
-    if (!m_song) return;
-    if (currentRow >= m_partsList.size()|| currentRow < 0)
+    if (!m_song || currentRow >= m_partsList.size() || currentRow < 0)
         return;
 
     m_song->setActiveChannel(m_partsList[currentRow].midiChannel());
@@ -63,7 +62,7 @@ void CTrackList::examineMidiEvent(CMidiEvent event)
 {
     int chan = event.channel();
 
-    assert (chan < MAX_MIDI_CHANNELS && chan >= 0);
+    assert(chan < MAX_MIDI_CHANNELS && chan >= 0);
     if (chan < MAX_MIDI_CHANNELS && chan >= 0)
     {
         if (event.type() == MIDI_NOTE_ON)
@@ -85,8 +84,8 @@ void CTrackList::examineMidiEvent(CMidiEvent event)
 // Returns true if there is a piano part on channels 3 & 4
 bool CTrackList::pianoPartConvetionTest()
 {
-    AnalyseItem left = m_midiChannels[CONVENTION_LEFT_HAND_CHANNEL];
-    AnalyseItem right = m_midiChannels[CONVENTION_RIGHT_HAND_CHANNEL];
+    const AnalyseItem& left = m_midiChannels[CONVENTION_LEFT_HAND_CHANNEL];
+    const AnalyseItem& right = m_midiChannels[CONVENTION_RIGHT_HAND_CHANNEL];
     // Both hands on channels 3 & 4
     if (left.active() && right.active()) {
         if (left.firstPatch() == right.firstPatch() && isPianoOrOrganPatch(right.firstPatch())) {
@@ -116,14 +115,15 @@ bool CTrackList::findLeftAndRightPianoParts()
     int patchA = -1;
     int chanA = -1;
 
-    for (int chan = 0 ; chan < MAX_MIDI_CHANNELS; chan++) {
+    for (int chan = 0; chan < MAX_MIDI_CHANNELS; ++chan) {
         if (chan == MIDI_DRUM_CHANNEL) {
             continue;
         }
-        if (m_midiChannels[chan].active()) {
-            int patch = m_midiChannels[chan].firstPatch();
+        const AnalyseItem& midiChannel = m_midiChannels[chan];
+        if (midiChannel.active()) {
+            int patch = midiChannel.firstPatch();
             if (isPianoOrOrganPatch(patch)) {
-                if (m_midiChannels[chan].trackCount() > 1) {
+                if (midiChannel.trackCount() > 1) {
                     CNote::setChannelHands(chan, chan);
                     return true;
                 }
@@ -149,23 +149,20 @@ bool CTrackList::findLeftAndRightPianoParts()
 
 int CTrackList::guessKeySignature(int chanA, int chanB)
 {
-    int chan;
-    int i;
     int keySignature = 0;
     int highScore = 0;
     int scale[MIDI_OCTAVE];
-    for (i=0; i < MIDI_OCTAVE; i++)
-        scale[i] = 0;
-    for (chan = 0 ; chan < MAX_MIDI_CHANNELS; chan++)
+    std::fill_n(scale, MIDI_OCTAVE, 0);
+    for (int chan = 0; chan < MAX_MIDI_CHANNELS; ++chan)
     {
         if (chanA == -1 || chan == chanA || chan == chanB)
         {
-            for (int note = 0; note < MAX_MIDI_NOTES; note++)
+            for (int note = 0; note < MAX_MIDI_NOTES; ++note)
                 scale[note % MIDI_OCTAVE] += m_noteFrequency[chan][note];
         }
     }
 
-    for (i = 0; i < MIDI_OCTAVE; i++)
+    for (int i = 0; i < MIDI_OCTAVE; i++)
     {
         int score = 0;
         struct {
@@ -210,13 +207,13 @@ int CTrackList::guessKeySignature(int chanA, int chanB)
 int CTrackList::findFreeChannel(int startChannel)
 {
     int chan;
-    for (chan = startChannel; chan < MAX_MIDI_CHANNELS; chan++)
+    for (chan = startChannel; chan < MAX_MIDI_CHANNELS; ++chan)
     {
         if (chan == Cfg::keyboardLightsChan)
             continue;
         if (chan == MIDI_DRUM_CHANNEL)
             continue;
-        if (!m_midiChannels[chan].active())
+        if (!isChannelActive(chan))
             return chan;
     }
     return -1;      // Not found
@@ -225,19 +222,17 @@ int CTrackList::findFreeChannel(int startChannel)
 
 void CTrackList::refresh()
 {
-    int rowCount = 0;
     m_partsList.clear();
 
-    for (int chan = 0; chan < MAX_MIDI_CHANNELS; chan++)
+    for (int chan = 0; chan < MAX_MIDI_CHANNELS; ++chan)
     {
-        if (m_midiChannels[chan].active())
+        if (isChannelActive(chan))
         {
             m_partsList.append(CTrackListItem(chan));
-            rowCount++;
         }
     }
 
-    if (CNote::bothHandsChan() != -2   ) { // -2 for not set -1 for not used
+    if (CNote::bothHandsChan() != -2) { // -2 for not set -1 for not used
         m_song->setActiveChannel(CNote::bothHandsChan());
     } else if (pianoPartConvetionTest()) {
         m_song->setActiveChannel(CNote::bothHandsChan());
@@ -252,9 +247,9 @@ void CTrackList::refresh()
         }
     }
 
-    for (int chan = 0; chan < MAX_MIDI_CHANNELS; chan++)
+    for (int chan = 0; chan < MAX_MIDI_CHANNELS; ++chan)
     {
-        AnalyseItem item  = m_midiChannels[chan];
+        const AnalyseItem& item  = m_midiChannels[chan];
         if (item.active())
         {
             if (item.firstPatch() == GM_PIANO_PATCH) {
@@ -273,19 +268,19 @@ void CTrackList::refresh()
     m_song->reset();
     int goodChan = findFreeChannel(0);
     int badChan = findFreeChannel(goodChan + 1);
-    int spareChan = findFreeChannel(badChan  +1 );
+    int spareChan = findFreeChannel(badChan + 1);
     if (badChan == -1)
     {
         // As we have not found two we have not found to empty channels to use
-        goodChan = 15 -1;
-        badChan  = 16-1;
+        goodChan = 15 - 1;
+        badChan  = 16 - 1;
     }
     m_song->setPianistChannels(goodChan, badChan);
-    ppLogInfo("Using Pianist Channels %d + %d", goodChan +1, badChan +1);
+    ppLogInfo("Using Pianist Channels %d + %d", goodChan + 1, badChan + 1);
     if (Cfg::keyboardLightsChan != -1 && spareChan != -1)
         m_song->mapTrack2Channel(Cfg::keyboardLightsChan,  spareChan);
-    for (int chan = 0; chan < MAX_MIDI_CHANNELS; chan++) {
-        AnalyseItem item  = m_midiChannels[chan];
+    for (int chan = 0; chan < MAX_MIDI_CHANNELS; ++chan) {
+        const AnalyseItem& item  = m_midiChannels[chan];
         CNote::setRightHandTrack(chan, item.rightHandTrack());
     }
 }
@@ -296,7 +291,7 @@ int CTrackList::getActiveItemIndex()
     for (int i = 0; i < m_partsList.size(); ++i)
     {
         chan = m_partsList[i].midiChannel();
-        if (chan == CNote::rightHandChan() )
+        if (chan == CNote::rightHandChan())
             return i;
     }
     return 0; // Not found so return first item on the list
@@ -305,14 +300,12 @@ int CTrackList::getActiveItemIndex()
 QStringList CTrackList::getAllChannelProgramNames(bool raw)
 {
     QStringList items;
-    int chan;
-    QString text;
     QString hand;
 
-    for (int i = 0; i < m_partsList.size(); ++i)
+    for (const auto& part : m_partsList)
     {
         hand.clear();
-        chan = m_partsList[i].midiChannel();
+        const int chan = part.midiChannel();
         if (raw == false)
         {
             if (CNote::leftHandChan() == chan)
@@ -320,7 +313,7 @@ QStringList CTrackList::getAllChannelProgramNames(bool raw)
             if (CNote::rightHandChan() == chan)
                 hand += QObject::tr("R");
         }
-        text = QString::number(chan+1) + hand + " " + getChannelProgramName(chan);
+        const QString text = QString::number(chan+1) + hand + " " + getChannelProgramName(chan);
         items += text;
     }
     return items;
@@ -341,9 +334,9 @@ void CTrackList::setActiveHandsIndex(int leftIndex, int rightIndex)
     int leftChannel = -1;
     int rightChannel = -1;
 
-    if (leftIndex>=0)
+    if (leftIndex >= 0)
         leftChannel = m_partsList.at(leftIndex).midiChannel();
-    if (rightIndex>=0)
+    if (rightIndex >= 0)
         rightChannel = m_partsList.at(rightIndex).midiChannel();
     m_settings->setChannelHands(leftChannel, rightChannel);
     refresh();
@@ -366,22 +359,22 @@ int CTrackList::getHandTrackIndex(whichPart_t whichPart)
     return -1;
 }
 
-void CTrackList::changeListWidgetItemView( int index, QListWidgetItem* listWidgetItem )
+void CTrackList::changeListWidgetItemView(int index, QListWidgetItem* listWidgetItem)
 {
     int chan = m_partsList[index].midiChannel();
-    if ( CNote::hasPianoPart( chan ))
+    if (CNote::hasPianoPart(chan))
     {
         QFont font = listWidgetItem->font();
-        if (CNote::rightHandChan() >= 0 && CNote::leftHandChan() >= 0 )
+        if (CNote::rightHandChan() >= 0 && CNote::leftHandChan() >= 0)
             font.setBold(true);
         listWidgetItem->setFont(font);
         listWidgetItem->setForeground(Qt::darkBlue);
     }
-    else if ( m_song->hasPianistKeyboardChannel( chan ) )
+    else if (m_song->hasPianistKeyboardChannel(chan))
         listWidgetItem->setForeground(Qt::lightGray);
 }
 
-QString CTrackList::getChannelProgramName(int chan)
+QString CTrackList::getChannelProgramName(int chan) const
 {
     if(chan<0 || chan>= MAX_MIDI_CHANNELS)
     {
@@ -397,6 +390,11 @@ QString CTrackList::getChannelProgramName(int chan)
         name = QObject::tr("Unknown");
 
     return name;
+}
+
+bool CTrackList::isChannelActive(int chan) const
+{
+    return chan >= 0 && chan < m_midiChannels.size() && m_midiChannels[chan].active();
 }
 
 QString CTrackList::getProgramName(int program)

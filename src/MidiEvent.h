@@ -91,8 +91,14 @@ class CMidiEvent
 public:
 
     CMidiEvent()
+        : m_type(MIDI_NONE),
+          m_deltaTime(0),
+          m_channel(0),
+          m_note(0),
+          m_velocity(0),
+          m_duration(0),
+          m_track()
     {
-        clear();
     }
 
     void clear()
@@ -310,7 +316,7 @@ public:
          default:
            {
              char s[16];
-             sprintf(s, "%2x", atype);
+             snprintf(s, sizeof(s), "%2x", atype);
              r = s;
            }
          }

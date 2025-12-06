@@ -255,6 +255,10 @@ if(APPLE)
 
 endif(APPLE)
 
+if(APPLE)
+    target_compile_definitions(pianobooster PRIVATE GL_SILENCE_DEPRECATION)
+endif()
+
 if(UNIX AND NOT APPLE)
     ADD_EXECUTABLE( pianobooster ${PIANOBOOSTER_SRCS}
         ${PIANOBOOSTER_MOC_SRCS} ${PIANOBOOSTER_RC_SRCS}
@@ -377,4 +381,3 @@ if (TREAT_WARNINGS_AS_ERRORS)
 endif ()
 
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/../music/BoosterMusicBooks.zip ${CMAKE_CURRENT_BINARY_DIR}/ COPYONLY)
-

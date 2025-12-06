@@ -59,9 +59,9 @@ public:
     ~CMidiTrack()
     {
         delete m_trackEventQueue;
-        for ( int chan =0; chan <MAX_MIDI_CHANNELS; chan++ )
+        for (auto &channelEventPtr : m_noteOnEventPtr)
         {
-            delete [] m_noteOnEventPtr[chan];
+            delete [] channelEventPtr;
         }
     }
 
@@ -148,11 +148,11 @@ private:
 
     void createNoteEventPtr(int channel)
     {
-        if (m_noteOnEventPtr[channel] == 0)
+        if (m_noteOnEventPtr[channel] == nullptr)
         {
             m_noteOnEventPtr[channel] = new CMidiEvent*[MAX_MIDI_NOTES];
             for (int pitch = 0; pitch < MAX_MIDI_NOTES; pitch++)
-                m_noteOnEventPtr[channel][pitch] = 0;
+                m_noteOnEventPtr[channel][pitch] = nullptr;
         }
     }
 
@@ -173,4 +173,3 @@ private:
 };
 
 #endif // __MIDITRACK_H__
-

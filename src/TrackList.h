@@ -30,9 +30,13 @@
 #define __TRACK_LIST_H__
 
 #include <QString>
+#include <QStringList>
 #include <QList>
-#include <QListWidgetItem>
 #include <QObject>
+#include <QSharedPointer>
+#include <QVector>
+
+#include <cstring>
 
 #include "MidiEvent.h"
 #include "Chord.h"
@@ -42,20 +46,22 @@
 
 class CSong;
 class CSettings;
+class QListWidgetItem;
 
 class AnalyseItem
 {
 public:
 
-    AnalyseItem() {}
+    AnalyseItem() = default;
 
-    AnalyseItem(int numberOfTracks)
+    AnalyseItem(int numberOfTracks) :
+        m_noteCount(0),
+        m_firstPatch(-1)
     {
-        m_noteCount = 0;
-        for(int i = 0; i < numberOfTracks; i++) {
+        for (int i = 0; i < numberOfTracks; ++i) {
              QSharedPointer<int> notePtr (new int[MAX_MIDI_NOTES]);
-             memset(notePtr.data(), 0, sizeof(int) * MAX_MIDI_NOTES );
-             m_noteFrequencyByTrack.append( notePtr) ;
+             std::memset(notePtr.data(), 0, sizeof(int) * MAX_MIDI_NOTES );
+             m_noteFrequencyByTrack.append(notePtr) ;
              m_noteCountByTrack.append(0);
         }
      }
@@ -67,7 +73,7 @@ public:
        int *noteFrequency = m_noteFrequencyByTrack[trackNo].data();
        int note = event.note();
        // count each note so we can guess the key signature
-       if (note >= 0 && note< MAX_MIDI_NOTES) {
+       if (note >= 0 && note < MAX_MIDI_NOTES) {
            (*(noteFrequency + note))++;
        }
        // If we have a note and no patch then default to grand piano patch
@@ -77,7 +83,7 @@ public:
    }
 
    int noteCount() const {return m_noteCount;}
-   int active() {return m_noteCount >0;}
+   int active() const {return m_noteCount >0;}
 
    void addPatch(int patch){
         if (m_firstPatch == -1) {
@@ -85,11 +91,11 @@ public:
         }
    }
 
-   int firstPatch() {return m_firstPatch;}
+   int firstPatch() const {return m_firstPatch;}
 
-   int trackCount() {
+   int trackCount() const {
        int acitveTracks = 0;
-       for (int track = 0; track < m_noteCountByTrack.size(); track++) {
+       for (int track = 0; track < m_noteCountByTrack.size(); ++track) {
            if (m_noteCountByTrack[track] > 0) {
                acitveTracks++;
            }
@@ -97,22 +103,22 @@ public:
        return acitveTracks;
    }
 
-   int rightHandTrack() {
+   int rightHandTrack() const {
        if (trackCount() <= 1) {
            return -1;
        }
        double highestAveragePitch = 0.0;
-       int rightHAndTrack = 1;
-       for (int track = 0; track < m_noteCountByTrack.size(); track++) {
+       int rightHandTrackIndex = 1;
+       for (int track = 0; track < m_noteCountByTrack.size(); ++track) {
            if (m_noteCountByTrack[track] > 0) {
                double averagePitch = averageNotePitch(track);
                if (averagePitch > highestAveragePitch ) {
                    highestAveragePitch = averagePitch;
-                   rightHAndTrack = track;
+                   rightHandTrackIndex = track;
                }
            }
        }
-       return rightHAndTrack;
+       return rightHandTrackIndex;
    }
 
    double averageNotePitch(int trackNo) const {
@@ -120,7 +126,7 @@ public:
        double sumOffAllPitches = 0.0;
        int *noteFrequency = m_noteFrequencyByTrack[trackNo].data();
 
-       for (int note = 0; note < MAX_MIDI_NOTES; note++) {
+       for (int note = 0; note < MAX_MIDI_NOTES; ++note) {
            int frequency =  *(noteFrequency + note);
            totalNoteCount += frequency;
            sumOffAllPitches += frequency * note;
@@ -153,10 +159,11 @@ class CTrackList : public QObject
 {
 Q_OBJECT
 public:
-    CTrackList()
+    CTrackList() :
+        QObject(nullptr),
+        m_song(nullptr),
+        m_settings(nullptr)
     {
-        m_song = 0;
-        m_settings = 0;
         reset(0);
     }
 
@@ -191,7 +198,7 @@ public:
         int totalNoteCount = 0;
         double sumOffAllPitches = 0.0;
 
-        for (int note = 0; note < MAX_MIDI_NOTES; note++) {
+        for (int note = 0; note < MAX_MIDI_NOTES; ++note) {
             int frequency = m_noteFrequency[chan][note];
             totalNoteCount += frequency;
             sumOffAllPitches += frequency * note;
@@ -200,7 +207,8 @@ public:
     }
 
 private:
-    QString getChannelProgramName(int chan);
+    QString getChannelProgramName(int chan) const;
+    bool isChannelActive(int chan) const;
 
     CSong* m_song;
     CSettings* m_settings;

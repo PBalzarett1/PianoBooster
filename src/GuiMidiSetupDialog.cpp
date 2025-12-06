@@ -36,8 +36,8 @@
 
 GuiMidiSetupDialog::GuiMidiSetupDialog(QWidget *parent)
     : QDialog(parent)
-    , m_song(nullptr)
     , m_settings(nullptr)
+    , m_song(nullptr)
     , m_latencyFix(0)
     , m_latencyChanged(false)
 {

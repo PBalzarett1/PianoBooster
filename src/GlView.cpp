@@ -147,9 +147,9 @@ void CGLView::drawTimeSignature()
     m_song->getTimeSig(&topNumber, &bottomNumber);
     if (topNumber == 0 ) return;
 
-    char bufferTop[10], bufferBottom[10];
-    sprintf(bufferTop, "%d", topNumber);
-    sprintf(bufferBottom, "%d", bottomNumber);
+    char bufferTop[16], bufferBottom[16];
+    snprintf(bufferTop, sizeof(bufferTop), "%d", topNumber);
+    snprintf(bufferBottom, sizeof(bufferBottom), "%d", bottomNumber);
 
     x = Cfg::timeSignatureX();
 

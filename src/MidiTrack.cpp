@@ -41,25 +41,29 @@
 
 int CMidiTrack::m_logLevel;
 
-CMidiTrack::CMidiTrack(fstream& file, int no) :m_file(file), m_trackNumber(no)
+CMidiTrack::CMidiTrack(fstream& file, int no)
+    : m_file(file),
+      m_trackNumber(no),
+      m_filePos(),
+      m_trackLength(0),
+      m_trackLengthCounter(0),
+      m_trackEventQueue(nullptr),
+      m_savedRunningStatus(0),
+      m_deltaTime(0),
+      m_currentTime(0),
+      m_midiError(SMF_NO_ERROR),
+      m_trackName()
 {
-    m_trackEventQueue = nullptr;
-    m_savedRunningStatus = 0;
-    m_trackLengthCounter = 0;
-    m_deltaTime = 0;
-    m_currentTime = 0;
     midiFailReset();
 
-    for ( int chan = 0; chan <MAX_MIDI_CHANNELS; chan++ )
+    for (auto &channelEventPtr : m_noteOnEventPtr)
     {
-        m_noteOnEventPtr[chan] = nullptr;
+        channelEventPtr = nullptr;
     }
-
-    int i;
 
     m_trackName.clear();
     m_trackLengthCounter = 8;
-    for ( i=0; i < 4; i++)
+    for (int i = 0; i < 4; i++)
     {
         if (m_file.get() !="MTrk"[i] )
         {
@@ -124,10 +128,8 @@ dword_t CMidiTrack::readVarLen()
 
 string CMidiTrack::readTextEvent()
 {
-    dword_t length;
-
     string text;
-    length = readVarLen();
+    dword_t length = readVarLen();
     if (length >= 1000)
     {
         ppLogError("Text Event too large %d", length);

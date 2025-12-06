@@ -38,29 +38,17 @@
 #define PC_KEY_LOWEST_NOTE    58
 #define PC_KEY_HIGHEST_NOTE    75
 
+class CMidiFile;
+class CScore;
+class CSettings;
+
 class CSong : public CConductor
 {
 public:
-    CSong()
-    {
-        CStavePos::setKeySignature( NOT_USED, 0 );
-        m_midiFile = new CMidiFile;
-        m_trackList = new CTrackList;
+    CSong();
+    ~CSong();
 
-        reset();
-    }
-
-    ~CSong()
-    {
-        delete m_midiFile;
-        delete m_trackList;
-    }
-
-    void reset()
-    {
-        m_reachedMidiEof = false;
-        m_findChord.reset();
-    }
+    void reset();
 
     void init2(CScore * scoreWin, CSettings* settings);
     eventBits_t task(qint64 ticks);
@@ -88,6 +76,7 @@ public:
 
 private:
     void midiFileInfo();
+    void insertChordIfFound(const CMidiEvent &event);
 
     CMidiFile * m_midiFile;
     CFindChord m_findChord;
@@ -98,4 +87,3 @@ private:
 };
 
 #endif  // __SONG_H__
-

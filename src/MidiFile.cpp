@@ -24,6 +24,18 @@
 
 int CMidiFile::m_ppqn = DEFAULT_PPQN;
 
+CMidiFile::CMidiFile()
+    : m_file(),
+      m_midiError(SMF_NO_ERROR),
+      m_tracks(),
+      m_songTitle(),
+      m_numberOfTracks(0)
+{
+    m_ppqn = DEFAULT_PPQN;
+    setSize(MAX_TRACKS);
+    resetTracks();
+}
+
 /* Read 16 bits from the Standard MIDI file */
 int CMidiFile::readWord(void)
 {
@@ -119,11 +131,7 @@ void CMidiFile::rewind()
         return;
     }
     m_numberOfTracks = ntrks;
-    for (int trk = 0; trk < arraySize(m_tracks); ++trk)
-    {
-        delete m_tracks[trk];
-        m_tracks[trk] = nullptr;
-    }
+    resetTracks();
     filePos = m_file.tellg();
     for (auto trk = 0; trk < ntrks; ++trk)
     {
@@ -159,4 +167,13 @@ bool CMidiFile::checkMidiEventFromStream(int streamIdx)
 CMidiEvent CMidiFile::fetchMidiEventFromStream(int trackNo)
 {
     return m_tracks[trackNo]->pop(trackNo);
+}
+
+void CMidiFile::resetTracks()
+{
+    for (auto &track : m_tracks)
+    {
+        delete track;
+        track = nullptr;
+    }
 }
