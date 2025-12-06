@@ -195,6 +195,7 @@ public:
     int getHandTrackIndex(whichPart_t whichPart);
 
     void changeListWidgetItemView(int index, QListWidgetItem* listWidgetItem);
+    bool isChannelActive(int chan) const;
 
     double averageNotePitch(int chan) {
         int totalNoteCount = 0;
@@ -210,7 +211,6 @@ public:
 
 private:
     QString getChannelProgramName(int chan) const;
-    bool isChannelActive(int chan) const;
 
     CSong* m_song;
     CSettings* m_settings;

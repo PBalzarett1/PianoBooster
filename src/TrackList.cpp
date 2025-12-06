@@ -271,11 +271,14 @@ void CTrackList::refresh()
     int spareChan = findFreeChannel(badChan + 1);
     if (badChan == -1)
     {
-        // As we have not found two we have not found to empty channels to use
-        goodChan = 15 - 1;
-        badChan  = 16 - 1;
+        // As we have not found two empty channels to use fall back to the highest channels
+        goodChan = MAX_MIDI_CHANNELS - 2;
+        badChan  = MAX_MIDI_CHANNELS - 1;
     }
-    m_song->setPianistChannels(goodChan, badChan);
+
+    const bool channelsClashWithSong = (goodChan >= 0 && isChannelActive(goodChan)) ||
+                                       (badChan >= 0 && isChannelActive(badChan));
+    m_song->setPianistChannels(goodChan, badChan, channelsClashWithSong);
     ppLogInfo("Using Pianist Channels %d + %d", goodChan + 1, badChan + 1);
     if (Cfg::keyboardLightsChan != -1 && spareChan != -1)
         m_song->mapTrack2Channel(Cfg::keyboardLightsChan,  spareChan);

@@ -87,6 +87,7 @@ CConductor::CConductor()
       m_pianoVolume(0),
       m_activeChannel(0),
       m_savedMainVolume(),
+      m_suppressPianistPatchUpdates(false),
       m_skill(0),
       m_mutePianistPart(false),
       m_latencyFix(0),
@@ -320,6 +321,9 @@ void CConductor::outputPianoVolume()
 
 void CConductor::updatePianoSounds()
 {
+    if (m_suppressPianistPatchUpdates)
+        return;
+
     CMidiEvent event;
 
     if (m_cfg_rightNoteSound>=0) // ignore if set to -1 (tr("None"))
@@ -340,6 +344,10 @@ void CConductor::setPianistProgram(int program)
         return;
 
     m_cfg_rightNoteSound = program;
+
+    if (m_suppressPianistPatchUpdates)
+        return;
+
     CMidiEvent event;
     event.programChangeEvent(0, m_pianistGoodChan, program);
     playTrackEvent(event);
@@ -1108,6 +1116,7 @@ void CConductor::rewind()
 
     m_cfg_playZoneEarly = CMidiFile::ppqnAdjust(static_cast<float>(Cfg::playZoneEarly())) * SPEED_ADJUST_FACTOR; // when playing along
     m_cfg_playZoneLate = CMidiFile::ppqnAdjust(static_cast<float>(Cfg::playZoneLate())) * SPEED_ADJUST_FACTOR;
+    m_suppressPianistPatchUpdates = false;
 }
 
 void CConductor::init2(CScore * scoreWin, CSettings* settings)

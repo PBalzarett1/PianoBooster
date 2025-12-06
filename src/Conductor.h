@@ -167,9 +167,10 @@ public:
 
     void setActiveChannel(int channel);
     int getActiveChannel(){return m_activeChannel;}
-    void setPianistChannels(int goodChan, int badChan){
+    void setPianistChannels(int goodChan, int badChan, bool suppressPatchUpdates = false){
         m_pianistGoodChan = goodChan;
         m_pianistBadChan = badChan;
+        m_suppressPianistPatchUpdates = suppressPatchUpdates;
     }
     bool hasPianistKeyboardChannel(int chan)   { return (m_pianistGoodChan == chan || m_pianistBadChan == chan ) ? true : false;}
 
@@ -192,6 +193,7 @@ public:
             updatePianoSounds();
     }
     void setPianistProgram(int program);
+    void setSuppressPianistPatchUpdates(bool suppress) { m_suppressPianistPatchUpdates = suppress; }
 
     void setEventBits(eventBits_t bits) { m_realTimeEventBits |= bits; } // don't change the other bits
     // set to true to force the score to be redrawn
@@ -320,6 +322,7 @@ private:
     int m_activeChannel; // The current part that is being displayed (used for boost)
     int m_savedMainVolume[MAX_MIDI_CHANNELS];
     static playMode_t m_playMode;
+    bool m_suppressPianistPatchUpdates;
     int m_skill;
     bool m_mutePianistPart;
     int m_latencyFix;     // Try to fix the latency (put the time in msec, 0 disables it)
