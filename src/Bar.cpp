@@ -109,7 +109,7 @@ void CBar::checkGotoBar()
 void CBar::setPlayFromBar(double bar)
 {
     m_playFromBar = bar;
-    m_playUptoBar = m_playFromBar + m_loopingBars;
+    updatePlayRange();
     setupEnableFlags();
     checkGotoBar();
 }
@@ -132,7 +132,7 @@ void CBar::setLoopingBars(double bars)
     if (bars < 0.0)
         bars = 0;
     m_loopingBars = bars;
-    m_playUptoBar = m_playFromBar + m_loopingBars;
+    updatePlayRange();
     setupEnableFlags();
     checkGotoBar();
 }

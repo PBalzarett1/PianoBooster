@@ -46,7 +46,27 @@ class CBar
 {
 public:
 
-    CBar() { reset(); }
+    CBar()
+        : m_deltaTime(0),
+          m_beatLength(0),
+          m_barLength(0),
+          m_startTimeSigTop(0),
+          m_startTimeSigBottom(0),
+          m_currentTimeSigTop(0),
+          m_currentTimeSigBottom(0),
+          m_barCounter(0),
+          m_beatCounter(0),
+          m_playFromBar(0.0),
+          m_playUptoBar(0.0),
+          m_loopingBars(0.0),
+          m_seekingBarNumber(false),
+          m_flushTicks(false),
+          m_eventBits(0),
+          m_enableLooping(false),
+          m_enablePlayFromBar(false)
+    {
+        reset();
+    }
 
     // You MUST clear the time sig to 0 first before setting an new start Time Signature
     // at the start of the piece of music
@@ -112,6 +132,7 @@ public:
 
 private:
     void checkGotoBar();
+    void updatePlayRange() { m_playUptoBar = m_playFromBar + m_loopingBars; }
     void setupEnableFlags()
     {
         m_enableLooping = (m_loopingBars > 0.0)?true:false;
@@ -141,4 +162,3 @@ private:
 };
 
 #endif  // __BAR_H__
-

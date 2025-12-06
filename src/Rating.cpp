@@ -34,10 +34,10 @@ void CRating::reset()
     m_totalNotesCount = 0;
     m_wrongNoteCount = 0;
     m_lateNoteCount = 0;
-    m_currentAccuracy = 0.5;
+    m_currentAccuracy = 0.5f;
     m_previousNoteCount = -1;
     m_previousLateNoteCount = 0;
-    m_factor = 2.0;
+    m_factor = 2.0f;
     m_goodAccuracyFlag = false;
 }
 
@@ -75,7 +75,7 @@ void CRating::calculateAccuracy()
             {0.00f, 0.015f, -0.02f, CColor(1.0, 0.4, 0.2)}
         };
 
-        for (auto i = 0; i< arraySize(accuracyTable); i++)
+        for (int i = 0; i < arraySize(accuracyTable); i++)
         {
             if (m_currentAccuracy >= accuracyTable[i].value  || i+1 == arraySize(accuracyTable))
             {
@@ -92,7 +92,7 @@ void CRating::calculateAccuracy()
 
         m_goodAccuracyFlag = false;
 
-        for (auto i = 0; i< arraySize(accuracyTable); i++)
+        for (int i = 0; i < arraySize(accuracyTable); i++)
         {
             if (m_currentAccuracy >= accuracyTable[i].value || i+1 == arraySize(accuracyTable))
             {
@@ -104,4 +104,3 @@ void CRating::calculateAccuracy()
         }
     }
 }
-

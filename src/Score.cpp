@@ -30,19 +30,20 @@
 #include "Draw.h"
 #include "Score.h"
 
-CScore::CScore(CSettings* settings) : CDraw(settings)
+CScore::CScore(CSettings* settings)
+    : CDraw(settings),
+      m_piano(new CPiano(settings)),
+      m_rating(nullptr),
+      m_scroll{nullptr},
+      m_activeScroll(-1),
+      m_scoreDisplayListId(0),
+      m_stavesDisplayListId(0)
 {
-    m_piano = new CPiano(settings);
-    m_rating = nullptr;
     for (int i=0; i< arraySize(m_scroll); i++)
     {
         m_scroll[i] = new CScroll(i, settings);
         m_scroll[i]->setChannel(i);
     }
-
-    m_activeScroll = -1;
-    m_stavesDisplayListId = 0;
-    m_scoreDisplayListId = 0;//glGenLists (1);
 }
 
 CScore::~CScore()

@@ -36,6 +36,15 @@ class CRating
 {
 public:
     CRating()
+        : m_totalNotesCount(0),
+          m_previousNoteCount(-1),
+          m_lateNoteCount(0),
+          m_previousLateNoteCount(0),
+          m_wrongNoteCount(0),
+          m_currentAccuracy(0.5f),
+          m_factor(2.0f),
+          m_currentColor(),
+          m_goodAccuracyFlag(false)
     {
         reset();
     }
