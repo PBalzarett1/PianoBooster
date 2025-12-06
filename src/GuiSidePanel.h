@@ -149,6 +149,10 @@ private slots:
     {
         if (m_song) m_song->mutePianistPart(checked);
     }
+    void on_oneFingerCheck_toggled(bool checked)
+    {
+        if (m_settings) m_settings->setOneFingerPlay(checked);
+    }
 
     void setTrackRightHandPart() {
         int row = trackListWidget->currentRow();

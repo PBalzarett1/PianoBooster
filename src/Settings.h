@@ -55,6 +55,7 @@ public:
     bool isTutorPagesEnabled() { return m_tutorPagesEnabled; }
     bool isFollowThroughErrorsEnabled() { return m_followThroughErrorsEnabled; }
     bool isColoredNotesEnabled() { return m_coloredNotes; }
+    bool oneFingerPlayEnabled() const { return m_oneFingerPlay; }
 
     /// Saves in the .ini file whether the user wants to show the note names
     void setNoteNamesEnabled(bool value);
@@ -83,6 +84,8 @@ public:
     bool followThroughErrors(){
         return m_followThroughErrorsEnabled;
     }
+    void setOneFingerPlay(bool enabled);
+    bool oneFingerPlay() const { return m_oneFingerPlay; }
 
     void updateTutorPage();
     void openSongFile(const QString & filename);
@@ -201,6 +204,7 @@ private:
     bool m_tutorPagesEnabled;
     bool m_advancedMode;
     bool m_followThroughErrorsEnabled;
+    bool m_oneFingerPlay;
     QString m_bookPath;
     QString m_currentBookName;
     QString m_currentSongName;

@@ -585,18 +585,15 @@ bool CConductor::validatePianistChord()
     if (m_piano->pianistBadNotesDown() >= 2)
         return false;
 
-    if (m_skill>=3)
-    {
-        if (m_goodPlayedNotes.length() == m_wantedChord.length())
-            return true;
-    }
-    else
-    {
-        if (m_goodPlayedNotes.length() >= 1)
-            return true;
+    const bool oneFingerPlay = m_settings && m_settings->oneFingerPlay();
 
-    }
-    return false;
+    if (oneFingerPlay)
+        return m_goodPlayedNotes.length() >= 1;
+
+    if (m_skill>=3)
+        return m_goodPlayedNotes.length() == m_wantedChord.length();
+
+    return m_goodPlayedNotes.length() >= 1;
 }
 
 /**

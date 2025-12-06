@@ -241,6 +241,16 @@
        </widget>
       </item>
       <item>
+       <widget class="QCheckBox" name="oneFingerCheck">
+        <property name="toolTip">
+         <string>Hit any one note in a chord to count it as played</string>
+        </property>
+        <property name="text">
+         <string>One-finger play (any chord note)</string>
+        </property>
+       </widget>
+      </item>
+      <item>
        <layout class="QHBoxLayout">
         <item>
          <widget class="QListWidget" name="trackListWidget">
