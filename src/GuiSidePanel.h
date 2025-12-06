@@ -153,6 +153,10 @@ private slots:
     {
         if (m_settings) m_settings->setOneFingerPlay(checked);
     }
+    void on_rhythmPracticeCheck_toggled(bool checked)
+    {
+        if (m_settings) m_settings->setRhythmPractice(checked);
+    }
 
     void setTrackRightHandPart() {
         int row = trackListWidget->currentRow();

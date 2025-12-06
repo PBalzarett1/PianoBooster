@@ -567,6 +567,10 @@ bool CConductor::validatePianistNote( const CMidiEvent & inputNote)
     if ( m_chordDeltaTime <= -m_cfg_playZoneEarly)
         return false;
 
+    const bool rhythmPractice = m_settings && m_settings->rhythmPractice();
+    if (rhythmPractice)
+        return true;
+
     return m_wantedChord.searchChord(inputNote.note(), m_transpose);
 }
 
@@ -586,8 +590,9 @@ bool CConductor::validatePianistChord()
         return false;
 
     const bool oneFingerPlay = m_settings && m_settings->oneFingerPlay();
+    const bool rhythmPractice = m_settings && m_settings->rhythmPractice();
 
-    if (oneFingerPlay)
+    if (oneFingerPlay || rhythmPractice)
         return m_goodPlayedNotes.length() >= 1;
 
     if (m_skill>=3)
@@ -699,7 +704,7 @@ void CConductor::pianistInput(CMidiEvent inputNote)
                 m_goodPlayedNotes.clear();
                 fetchNextChord();
                 // count the good notes so that the live percentage looks OK
-                m_rating.totalNotes(m_wantedChord.length());
+                m_rating.totalNotes(expectedNotesForRating());
                 m_rating.calculateAccuracy();
                 m_settings->pianistActive();
                 if (m_rating.isAccuracyGood() || m_playMode == PB_PLAY_MODE_playAlong)
@@ -716,7 +721,8 @@ void CConductor::pianistInput(CMidiEvent inputNote)
                 goodSound = false;
 
                 m_piano->addPianistNote(hand, inputNote, false);
-                m_rating.wrongNotes(1);
+                if (!(m_settings && m_settings->rhythmPractice()))
+                    m_rating.wrongNotes(1);
 
                 if (m_settings->followThroughErrors() && m_playMode == PB_PLAY_MODE_followYou) // If the setting is checked, errors cause following too
                   {
@@ -730,7 +736,9 @@ void CConductor::pianistInput(CMidiEvent inputNote)
                       {
                     // Register the wrong note in the ratings calculation (if not as missed notes, I don't believe it's factored in)
                     missedNotesColor(Cfg::pianoBadColor());
-                    m_rating.lateNotes(m_wantedChord.length() - m_goodPlayedNotes.length());
+                    int missed = expectedNotesForRating() - m_goodPlayedNotes.length();
+                    if (missed < 0) missed = 0;
+                    m_rating.lateNotes(missed);
                     setEventBits(EVENT_BITS_forceRatingRedraw);
                     fetchNextChord(); // Skip through the wrong note and continue to the next
 
@@ -895,7 +903,9 @@ void CConductor::followPlaying()
         {
             missedNotesColor(Cfg::playedStoppedColor());
             fetchNextChord();
-            m_rating.lateNotes(m_wantedChord.length() - m_goodPlayedNotes.length());
+            int missed = expectedNotesForRating() - m_goodPlayedNotes.length();
+            if (missed < 0) missed = 0;
+            m_rating.lateNotes(missed);
             setEventBits( EVENT_BITS_forceRatingRedraw);
         }
     }
@@ -938,6 +948,13 @@ void CConductor::missedNotesColor(CColor color)
     }
 }
 
+int CConductor::expectedNotesForRating() const
+{
+    if (m_settings && m_settings->rhythmPractice())
+        return 1;
+    return m_wantedChord.length();
+}
+
 void CConductor::realTimeEngine(qint64 mSecTicks)
 {
     auto ticks = m_tempo.mSecToTicks(mSecTicks);
@@ -968,7 +985,9 @@ void CConductor::realTimeEngine(qint64 mSecTicks)
                 m_followPlayingTimeOut = true;
 
                 m_tempo.clearPlayingTicks();
-                m_rating.lateNotes(m_wantedChord.length() - m_goodPlayedNotes.length());
+                int missed = expectedNotesForRating() - m_goodPlayedNotes.length();
+                if (missed < 0) missed = 0;
+                m_rating.lateNotes(missed);
                 setEventBits( EVENT_BITS_forceRatingRedraw);
 
                 missedNotesColor(Cfg::playedStoppedColor());

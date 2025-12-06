@@ -87,6 +87,7 @@ void GuiSidePanel::init(CSong* songObj, CTrackList* trackList, GuiTopBar* topBar
     repeatSong->setChecked(m_settings->value("SidePanel/repeatSong",false).toBool());
     connect(repeatSong,SIGNAL(stateChanged(int)),this,SLOT(on_repeatSong_released()));
     oneFingerCheck->setChecked(m_settings->oneFingerPlay());
+    rhythmPracticeCheck->setChecked(m_settings->rhythmPractice());
 
     boostSlider->setMinimum(-100);
     boostSlider->setMaximum(100);

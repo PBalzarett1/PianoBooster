@@ -251,6 +251,16 @@
        </widget>
       </item>
       <item>
+       <widget class="QCheckBox" name="rhythmPracticeCheck">
+        <property name="toolTip">
+         <string>Ignore pitch; any key at the right time counts</string>
+        </property>
+        <property name="text">
+         <string>Rhythm practice only (ignore pitch)</string>
+        </property>
+       </widget>
+      </item>
+      <item>
        <layout class="QHBoxLayout">
         <item>
          <widget class="QListWidget" name="trackListWidget">

@@ -72,6 +72,7 @@ CSettings::CSettings(QtWindow *mainWindow)
       m_advancedMode(false),
       m_followThroughErrorsEnabled(value(QStringLiteral("Score/FollowThroughErrors"), false).toBool()),
       m_oneFingerPlay(value(QStringLiteral("SidePanel/OneFingerPlay"), false).toBool()),
+      m_rhythmPractice(value(QStringLiteral("SidePanel/RhythmPractice"), false).toBool()),
       m_bookPath(),
       m_currentBookName(),
       m_currentSongName(),
@@ -126,6 +127,11 @@ void CSettings::setFollowThroughErrorsEnabled(bool value) {
 void CSettings::setOneFingerPlay(bool enabled) {
     m_oneFingerPlay = enabled;
     setValue(QStringLiteral("SidePanel/OneFingerPlay"), enabled);
+}
+
+void CSettings::setRhythmPractice(bool enabled) {
+    m_rhythmPractice = enabled;
+    setValue(QStringLiteral("SidePanel/RhythmPractice"), enabled);
 }
 
 // Open a document if it exists or else create it (also delete an duplicates

@@ -52,16 +52,15 @@ class CNote
 public:
     CNote()
         : m_part(PB_PART_none),
-          m_pitch(0),
-          m_duration(0)
+          m_pitch(0)
     {
     }
 
     CNote(whichPart_t part, int note, int duration = 0)
         : m_part(part),
-          m_pitch(note),
-          m_duration(duration)
+          m_pitch(note)
     {
+        Q_UNUSED(duration);
     }
 
     static void reset();
@@ -95,7 +94,6 @@ public:
 private:
     whichPart_t m_part;
     int m_pitch;
-    int m_duration;
     static int m_leftHandChannel;
     static int m_rightHandChannel;
     static whichPart_t m_activeHand;
@@ -123,7 +121,9 @@ public:
     }
 
     CNote getNote(int index) {return m_notes[index];}
+    CNote getNote(int index) const {return m_notes[index];}
     int length() {return m_length;}
+    int length() const {return m_length;}
     void setDeltaTime(int delta) {m_deltaTime = delta;}
     int getDeltaTime() {return m_deltaTime;}
     void clear() { m_length = 0; m_deltaTime = 0;}
