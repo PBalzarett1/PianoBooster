@@ -392,6 +392,13 @@ QString CTrackList::getChannelProgramName(int chan) const
     return name;
 }
 
+int CTrackList::getChannelPatch(int channel) const
+{
+    if (channel < 0 || channel >= m_midiChannels.size())
+        return -1;
+    return m_midiChannels[channel].firstPatch();
+}
+
 bool CTrackList::isChannelActive(int chan) const
 {
     return chan >= 0 && chan < m_midiChannels.size() && m_midiChannels[chan].active();

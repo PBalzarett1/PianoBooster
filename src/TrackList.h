@@ -190,6 +190,8 @@ public:
     // set the midi channels to use for the left and right hand piano parts
     void setActiveHandsIndex(int leftIndex, int rightIndex);
 
+    int getChannelPatch(int channel) const;
+
     int getHandTrackIndex(whichPart_t whichPart);
 
     void changeListWidgetItemView(int index, QListWidgetItem* listWidgetItem);

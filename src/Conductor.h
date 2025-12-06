@@ -191,6 +191,7 @@ public:
         if (update)
             updatePianoSounds();
     }
+    void setPianistProgram(int program);
 
     void setEventBits(eventBits_t bits) { m_realTimeEventBits |= bits; } // don't change the other bits
     // set to true to force the score to be redrawn

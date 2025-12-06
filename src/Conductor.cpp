@@ -334,6 +334,17 @@ void CConductor::updatePianoSounds()
     }
 }
 
+void CConductor::setPianistProgram(int program)
+{
+    if (program < 0)
+        return;
+
+    m_cfg_rightNoteSound = program;
+    CMidiEvent event;
+    event.programChangeEvent(0, m_pianistGoodChan, program);
+    playTrackEvent(event);
+}
+
 void CConductor::testWrongNoteSound(bool enable)
 {
     m_testWrongNoteSound = enable;

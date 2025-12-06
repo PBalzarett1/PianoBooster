@@ -147,6 +147,12 @@ void CSong::setActiveChannel(int chan)
 {
     this->CConductor::setActiveChannel(chan);
     m_scoreWin->setActiveChannel(chan);
+    if (m_trackList)
+    {
+        const int program = m_trackList->getChannelPatch(chan);
+        if (program >= 0)
+            setPianistProgram(program);
+    }
     regenerateChordQueue();
 }
 
