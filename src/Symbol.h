@@ -99,11 +99,11 @@ public:
 
     ////////////////////////////////////////////////////////////////////////////////
     //@brief Get the type of symbol
-    musicalSymbol_t getType(){return m_symbolType;}
+    musicalSymbol_t getType() const {return m_symbolType;}
 
     ////////////////////////////////////////////////////////////////////////////////
     //@brief how long the midi note was played for
-    int getMidiDuration(){return m_midiDuration;}
+    int getMidiDuration() const {return m_midiDuration;}
 
     ////////////////////////////////////////////////////////////////////////////////
     //@brief set the midi note duration
@@ -116,20 +116,20 @@ public:
 
     ////////////////////////////////////////////////////////////////////////////////
     //@brief returns the midi note number
-    int getNote(){return m_midiNote;}
+    int getNote() const {return m_midiNote;}
 
     ////////////////////////////////////////////////////////////////////////////////
     //@brief returns the midi note number
-    whichPart_t getHand(){return m_hand;}
+    whichPart_t getHand() const {return m_hand;}
 
     ////////////////////////////////////////////////////////////////////////////////
     //@brief get the Stave Position
-    CStavePos getStavePos(){return m_stavePos;}
+    CStavePos getStavePos() const {return m_stavePos;}
 
     void setColor(CColor color){ m_color = color;}
-    CColor getColor(){return m_color;}
+    CColor getColor() const {return m_color;}
     void setPianistTiming(qint64 timing){ m_pianistTiming = timing;}
-    qint64 getPianistTiming(){ return m_pianistTiming; }
+    qint64 getPianistTiming() const { return m_pianistTiming; }
 
     void transpose(int amount)
     {
@@ -146,8 +146,8 @@ public:
         m_total = total;
     }
 
-    int getNoteIndex() { return m_index; }
-    int getNoteTotal() { return m_total; }
+    int getNoteIndex() const { return m_index; }
+    int getNoteTotal() const { return m_total; }
     ////////////////////////////////////////////////////////////////////////////////
     //! @brief          The accidental
     //! return          0 = none, 1=sharp, -1 =flat, 2=natural.

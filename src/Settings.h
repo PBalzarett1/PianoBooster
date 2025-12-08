@@ -87,8 +87,10 @@ public:
     }
     void setOneFingerPlay(bool enabled);
     bool oneFingerPlay() const { return m_oneFingerPlay; }
+    bool pianoRollViewEnabled() const { return m_pianoRollView; }
     void setRhythmPractice(bool enabled);
     bool rhythmPractice() const { return m_rhythmPractice; }
+    void setPianoRollViewEnabled(bool enabled);
 
     void updateTutorPage();
     void openSongFile(const QString & filename);
@@ -212,6 +214,7 @@ private:
     bool m_advancedMode;
     bool m_followThroughErrorsEnabled;
     bool m_oneFingerPlay;
+    bool m_pianoRollView;
     bool m_rhythmPractice;
     QString m_bookPath;
     QString m_currentBookName;

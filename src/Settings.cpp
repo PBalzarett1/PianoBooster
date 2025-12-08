@@ -73,6 +73,7 @@ CSettings::CSettings(QtWindow *mainWindow)
       m_advancedMode(false),
       m_followThroughErrorsEnabled(value(QStringLiteral("Score/FollowThroughErrors"), false).toBool()),
       m_oneFingerPlay(value(QStringLiteral("SidePanel/OneFingerPlay"), false).toBool()),
+      m_pianoRollView(value(QStringLiteral("Score/PianoRollView"), false).toBool()),
       m_rhythmPractice(value(QStringLiteral("SidePanel/RhythmPractice"), false).toBool()),
       m_bookPath(),
       m_currentBookName(),
@@ -168,6 +169,11 @@ void CSettings::updateStarsForSong(const QString &songId, quint16 starMask)
 void CSettings::setOneFingerPlay(bool enabled) {
     m_oneFingerPlay = enabled;
     setValue(QStringLiteral("SidePanel/OneFingerPlay"), enabled);
+}
+
+void CSettings::setPianoRollViewEnabled(bool enabled) {
+    m_pianoRollView = enabled;
+    setValue(QStringLiteral("Score/PianoRollView"), enabled);
 }
 
 void CSettings::setRhythmPractice(bool enabled) {

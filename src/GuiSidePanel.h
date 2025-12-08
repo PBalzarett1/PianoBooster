@@ -157,6 +157,11 @@ private slots:
     {
         if (m_settings) m_settings->setRhythmPractice(checked);
     }
+    void on_pianoRollViewCheck_toggled(bool checked)
+    {
+        if (m_settings) m_settings->setPianoRollViewEnabled(checked);
+        if (m_song) m_song->refreshScroll();
+    }
 
     void setTrackRightHandPart() {
         int row = trackListWidget->currentRow();

@@ -79,6 +79,8 @@ private:
     };
 
     void compileSlot(CSlotDisplayList info);
+    void drawSlotPianoRoll(CSlot* slot);
+    void drawPianoRollNote(const CSymbol& symbol, float x, float y);
     bool validPianistChord(int index);
     bool insertSlots();
     void removeSlots();

@@ -28,6 +28,7 @@
 
 #include "Cfg.h"
 #include "Scroll.h"
+#include "Settings.h"
 
 //#define NOTE_AHEAD_GAP          50
 //#define NOTE_BEHIND_GAP          14
@@ -65,7 +66,10 @@ void CScroll::compileSlot(CSlotDisplayList info)
     glTranslatef (static_cast<float>(info.getDeltaTime()) * m_noteSpacingFactor, 0.0f, 0.0f); /*  move position  */
 
     info.transpose(m_transpose);
-    drawSlot(&info);
+    if (m_settings->pianoRollViewEnabled())
+        drawSlotPianoRoll(&info);
+    else
+        drawSlot(&info);
     /*
     int i;
     CStavePos stavePos;
@@ -81,6 +85,92 @@ void CScroll::compileSlot(CSlotDisplayList info)
     */
     glCallList (info.m_nextDisplayListId);    /* Automatically draw the next slot even if it is not there yet */
     glEndList ();
+}
+
+void CScroll::drawPianoRollNote(const CSymbol& symbol, float x, float y)
+{
+    const float durationTicks = static_cast<float>(symbol.getMidiDuration());
+    float duration = durationTicks * m_noteSpacingFactor;
+    // Guard against zero/negative or extremely small widths so very short notes are still visible
+    const float minWidth = HORIZONTAL_SPACING_FACTOR * 0.35f;
+    if (duration < minWidth)
+        duration = minWidth;
+
+    CColor color = symbol.getColor();
+    if (m_settings->coloredNotes() && color == Cfg::noteColor())
+    {
+        int note = symbol.getNote() % MIDI_OCTAVE;
+        switch (note)
+        {
+            case 0:
+                color = CColor(1.0, 0.0, 0.0); // C
+                break;
+            case 1:
+                color = CColor(1.0, 0.25, 0.0);
+                break;
+            case 2:
+                color = CColor(1.0, 0.5, 0.0); // D
+                break;
+            case 3:
+                color = CColor(1.0, 0.75, 0.0);
+                break;
+            case 4:
+                color = CColor(1.0, 1.0, 0.0); // E
+                break;
+            case 5:
+                color = CColor(0.0, 1.0, 0.0); // F
+                break;
+            case 6:
+                color = CColor(0.0, 0.5, 0.5);
+                break;
+            case 7:
+                color = CColor(0.0, 0.0, 1.0); // G
+                break;
+            case 8:
+                color = CColor(0.290, 0.0, 0.903);
+                break;
+            case 9:
+                color = CColor(0.580, 0.0, 0.827); // A
+                break;
+            case 10:
+                color = CColor(0.790, 0.0, 0.903);
+                break;
+            case 11:
+                color = CColor(1.0, 0.0, 1.0); // B
+                break;
+        }
+    }
+
+    const float halfHeight = CStavePos::verticalNoteSpacing() * 0.6f;
+
+    drColor(color);
+    glBegin(GL_QUADS);
+    glVertex2f(x, y - halfHeight);
+    glVertex2f(x + duration, y - halfHeight);
+    glVertex2f(x + duration, y + halfHeight);
+    glVertex2f(x, y + halfHeight);
+    glEnd();
+}
+
+void CScroll::drawSlotPianoRoll(CSlot* slot)
+{
+    CStavePos stavePos;
+    for (int i=0; i < slot->length(); i++)
+    {
+        CSymbol symbol = slot->getSymbol(i);
+        stavePos.notePos(symbol.getHand(), symbol.getNote());
+        float y = stavePos.getPosYRelative();
+
+        if (symbol.getType() >= PB_SYMBOL_noteHead)
+        {
+            drawPianoRollNote(symbol, 0.0f, y);
+            drawSymbol(symbol, 0.0f, y);
+        }
+        else
+        {
+            drawSymbol(symbol, 0.0f, y);
+        }
+    }
 }
 
 /*! Insert a symbol into the display list
