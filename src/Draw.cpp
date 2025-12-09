@@ -391,6 +391,128 @@ bool CDraw::drawNote(CSymbol* symbol, float x, float y, CSlot* slot, CColor colo
     }
     drawStaveExtentsion(*symbol, x, 16, playable);
     drColor(color);
+
+    // Standard notehead geometry reused by both the normal and experimental duration view
+    const auto drawStandardNoteHead = [&](bool filled)
+    {
+        if (filled)
+        {
+            glBegin(GL_POLYGON);
+                glVertex2f(-7.0f + x,  2.0f + y); // 1
+                glVertex2f(-5.0f + x,  4.0f + y); // 2
+                glVertex2f(-1.0f + x,  6.0f + y); // 3
+                glVertex2f( 4.0f + x,  6.0f + y); // 4
+                glVertex2f( 7.0f + x,  4.0f + y); // 5
+                glVertex2f( 7.0f + x,  1.0f + y); // 6
+                glVertex2f( 6.0f + x, -2.0f + y); // 7
+                glVertex2f( 4.0f + x, -4.0f + y); // 8
+                glVertex2f( 0.0f + x, -6.0f + y); // 9
+                glVertex2f(-4.0f + x, -6.0f + y); // 10
+                glVertex2f(-8.0f + x, -3.0f + y); // 11
+                glVertex2f(-8.0f + x, -0.0f + y); // 12
+            glEnd();
+        }
+        else
+        {
+            glLineWidth(2.0);
+            glBegin(GL_LINE_STRIP);
+                glVertex2f(-7.0f + x,  2.0f + y); // 1
+                glVertex2f(-5.0f + x,  4.0f + y); // 2
+                glVertex2f(-1.0f + x,  6.0f + y); // 3
+                glVertex2f( 4.0f + x,  6.0f + y); // 4
+                glVertex2f( 7.0f + x,  4.0f + y); // 5
+                glVertex2f( 7.0f + x,  1.0f + y); // 6
+                glVertex2f( 6.0f + x, -2.0f + y); // 7
+                glVertex2f( 4.0f + x, -4.0f + y); // 8
+                glVertex2f( 0.0f + x, -6.0f + y); // 9
+                glVertex2f(-4.0f + x, -6.0f + y); // 10
+                glVertex2f(-8.0f + x, -3.0f + y); // 11
+                glVertex2f(-8.0f + x, -0.0f + y); // 12
+            glEnd();
+        }
+    };
+
+    // Optional simple duration view: reuse standard heads, vary fill/stem/flags
+    if (Cfg::experimentalNoteLength)
+    {
+        const musicalSymbol_t type = symbol->getType();
+        const float stemX = 7.0f + x;   // right edge of the standard head
+        const float stemHeight = 16.0f;
+
+        const auto drawStem = [&]()
+        {
+            glLineWidth(1.2f);
+            glBegin(GL_LINES);
+                glVertex2f(stemX, 0.0f + y);
+                glVertex2f(stemX, stemHeight + y);
+            glEnd();
+        };
+
+        const auto drawFlags = [&](int count)
+        {
+            float flagY = stemHeight - 2.0f;
+            for (int i = 0; i < count; ++i)
+            {
+                glLineWidth(1.2f);
+                glBegin(GL_LINES);
+                    glVertex2f(stemX, flagY + y);
+                    glVertex2f(stemX + 5.0f, flagY - 3.0f + y);
+                glEnd();
+                flagY -= 3.5f;
+            }
+        };
+
+        switch (type)
+        {
+            case PB_SYMBOL_breve:
+                drawStandardNoteHead(false);
+                glLineWidth(1.2f);
+                glBegin(GL_LINES);
+                    glVertex2f(-10.5f + x, 0.0f + y);
+                    glVertex2f(-8.5f  + x, 0.0f + y);
+                    glVertex2f( 8.5f  + x, 0.0f + y);
+                    glVertex2f(10.5f  + x, 0.0f + y);
+                glEnd();
+                break;
+
+            case PB_SYMBOL_semibreve:
+                drawStandardNoteHead(false);
+                break;
+
+            case PB_SYMBOL_minim:
+                drawStandardNoteHead(false);
+                drawStem();
+                break;
+
+            case PB_SYMBOL_crotchet:
+                drawStandardNoteHead(true);
+                drawStem();
+                break;
+
+            case PB_SYMBOL_quaver:
+                drawStandardNoteHead(true);
+                drawStem();
+                drawFlags(1);
+                break;
+
+            case PB_SYMBOL_semiquaver:
+                drawStandardNoteHead(true);
+                drawStem();
+                drawFlags(2);
+                break;
+
+            case PB_SYMBOL_demisemiquaver:
+            default:
+                drawStandardNoteHead(true);
+                drawStem();
+                drawFlags(3);
+                break;
+        }
+
+        checkAccidental(*symbol, x, y);
+        return playable;
+    }
+
     bool solidNoteHead = false;
     bool showNoteStem = false;
     int stemFlagCount = 0;
