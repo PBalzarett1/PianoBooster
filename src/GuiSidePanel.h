@@ -157,6 +157,10 @@ private slots:
     {
         if (m_settings) m_settings->setRhythmPractice(checked);
     }
+    void on_metronomeCheck_toggled(bool checked)
+    {
+        if (m_settings) m_settings->setMetronomeEnabled(checked);
+    }
     void on_pianoRollViewCheck_toggled(bool checked)
     {
         if (m_settings) m_settings->setPianoRollViewEnabled(checked);

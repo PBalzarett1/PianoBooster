@@ -250,16 +250,26 @@
         </property>
        </widget>
       </item>
-       <item>
-        <widget class="QCheckBox" name="rhythmPracticeCheck">
-         <property name="toolTip">
-          <string>Ignore pitch; any key at the right time counts</string>
-         </property>
-         <property name="text">
-          <string>Rhythm practice only (ignore pitch)</string>
-         </property>
-        </widget>
-       </item>
+      <item>
+       <widget class="QCheckBox" name="rhythmPracticeCheck">
+        <property name="toolTip">
+         <string>Ignore pitch; any key at the right time counts</string>
+        </property>
+        <property name="text">
+         <string>Rhythm practice only (ignore pitch)</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QCheckBox" name="metronomeCheck">
+        <property name="toolTip">
+         <string>Play a click on each beat</string>
+        </property>
+        <property name="text">
+         <string>Metronome</string>
+        </property>
+       </widget>
+      </item>
       <item>
        <widget class="QCheckBox" name="pianoRollViewCheck">
         <property name="toolTip">

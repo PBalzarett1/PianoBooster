@@ -73,6 +73,7 @@ CSettings::CSettings(QtWindow *mainWindow)
       m_advancedMode(false),
       m_followThroughErrorsEnabled(value(QStringLiteral("Score/FollowThroughErrors"), false).toBool()),
       m_oneFingerPlay(value(QStringLiteral("SidePanel/OneFingerPlay"), false).toBool()),
+      m_metronomeEnabled(value(QStringLiteral("SidePanel/Metronome"), false).toBool()),
       m_pianoRollView(value(QStringLiteral("Score/PianoRollView"), false).toBool()),
       m_rhythmPractice(value(QStringLiteral("SidePanel/RhythmPractice"), false).toBool()),
       m_bookPath(),
@@ -98,6 +99,7 @@ void CSettings::init(CSong* song, GuiSidePanel* sidePanel, GuiTopBar* topBar)
     m_song = song;
     m_guiSidePanel = sidePanel;
     m_guiTopBar = topBar;
+    Cfg::metronomeEnabled = m_metronomeEnabled;
 }
 
 void CSettings::setNoteNamesEnabled(bool value) {
@@ -114,6 +116,12 @@ void CSettings::setTutorPagesEnabled(bool value) {
     m_tutorPagesEnabled = value;
     setValue(QStringLiteral("Tutor/TutorPages"), value );
     updateTutorPage();
+}
+
+void CSettings::setMetronomeEnabled(bool enabled) {
+    m_metronomeEnabled = enabled;
+    Cfg::metronomeEnabled = enabled;
+    setValue(QStringLiteral("SidePanel/Metronome"), enabled);
 }
 
 void CSettings::setCourtesyAccidentals(bool value) {

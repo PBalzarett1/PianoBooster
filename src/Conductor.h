@@ -321,6 +321,8 @@ private:
     int m_boostVolume;
     int m_pianoVolume;
     int m_activeChannel; // The current part that is being displayed (used for boost)
+    qint64 m_metronomeTickAccum;
+    int m_metronomeBeatIndex;
     int m_savedMainVolume[MAX_MIDI_CHANNELS];
     static playMode_t m_playMode;
     bool m_suppressPianistPatchUpdates;

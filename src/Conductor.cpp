@@ -86,6 +86,8 @@ CConductor::CConductor()
       m_boostVolume(0),
       m_pianoVolume(0),
       m_activeChannel(0),
+      m_metronomeTickAccum(0),
+      m_metronomeBeatIndex(0),
       m_savedMainVolume(),
       m_suppressPianistPatchUpdates(false),
       m_skill(0),
@@ -121,6 +123,8 @@ CConductor::~CConductor()
 void CConductor::reset()
 {
     resetTrackChannelMap();
+    m_metronomeTickAccum = 0;
+    m_metronomeBeatIndex = 0;
 }
 
 void CConductor::resetTrackChannelMap()
@@ -383,6 +387,8 @@ void CConductor::playMusic(bool start)
     if (start)
     {
         resetAllChannels();
+        m_metronomeTickAccum = 0;
+        m_metronomeBeatIndex = 0;
 
         testWrongNoteSound(false);
         outputBoostVolume();
@@ -1027,6 +1033,28 @@ void CConductor::realTimeEngine(qint64 mSecTicks)
 
     addDeltaTime(ticks);
 
+    if (Cfg::metronomeEnabled && ticks > 0)
+    {
+        const qint64 beatTicks = m_bar.getBeatLength() * SPEED_ADJUST_FACTOR;
+        m_metronomeTickAccum += ticks;
+        while (m_metronomeTickAccum >= beatTicks && beatTicks > 0)
+        {
+            m_metronomeTickAccum -= beatTicks;
+            const int timeSigTop = m_bar.getTimeSigTop();
+            const bool downBeat = (timeSigTop > 0) ? (m_metronomeBeatIndex % timeSigTop == 0) : true;
+
+            CMidiEvent click;
+            const int note = downBeat ? 37 : 39;
+            const int velocity = downBeat ? 110 : 80;
+            click.noteOnEvent(0, MIDI_DRUM_CHANNEL, note, velocity);
+            playMidiEvent(click);
+            click.noteOffEvent(0, MIDI_DRUM_CHANNEL, note, 0);
+            playMidiEvent(click);
+
+            m_metronomeBeatIndex++;
+        }
+    }
+
     followPlaying();
     int type;
     while ( m_playingDeltaTime >= m_leadLagAdjust)
@@ -1122,6 +1150,8 @@ void CConductor::rewind()
         m_piano->clear();
     resetWantedChord();
     setFollowSkillAdvanced(false);
+    m_metronomeTickAccum = 0;
+    m_metronomeBeatIndex = 0;
 
     m_cfg_earlyNotesPoint = CMidiFile::ppqnAdjust(15); // was 10 playZoneEarly
     m_cfg_stopPointBeginner = CMidiFile::ppqnAdjust(-0); //was -3; // stop just after the beat

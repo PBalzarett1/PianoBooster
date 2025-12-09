@@ -88,6 +88,7 @@ void GuiSidePanel::init(CSong* songObj, CTrackList* trackList, GuiTopBar* topBar
     connect(repeatSong,SIGNAL(stateChanged(int)),this,SLOT(on_repeatSong_released()));
     oneFingerCheck->setChecked(m_settings->oneFingerPlay());
     rhythmPracticeCheck->setChecked(m_settings->rhythmPractice());
+    metronomeCheck->setChecked(m_settings->isMetronomeEnabled());
     pianoRollViewCheck->setChecked(m_settings->pianoRollViewEnabled());
 
     boostSlider->setMinimum(-100);

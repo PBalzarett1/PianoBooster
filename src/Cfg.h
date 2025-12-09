@@ -137,6 +137,7 @@ public:
     static int logLevel;
     static bool experimentalTempo;
     static bool experimentalNoteLength;
+    static bool metronomeEnabled;
     static int experimentalSwapInterval;
     static int tickRate;
     static bool useLogFile;

@@ -57,6 +57,7 @@ public:
     bool isColoredNotesEnabled() { return m_coloredNotes; }
     bool oneFingerPlayEnabled() const { return m_oneFingerPlay; }
     bool rhythmPracticeEnabled() const { return m_rhythmPractice; }
+    bool isMetronomeEnabled() const { return m_metronomeEnabled; }
 
     /// Saves in the .ini file whether the user wants to show the note names
     void setNoteNamesEnabled(bool value);
@@ -90,6 +91,7 @@ public:
     bool pianoRollViewEnabled() const { return m_pianoRollView; }
     void setRhythmPractice(bool enabled);
     bool rhythmPractice() const { return m_rhythmPractice; }
+    void setMetronomeEnabled(bool enabled);
     void setPianoRollViewEnabled(bool enabled);
 
     void updateTutorPage();
@@ -214,6 +216,7 @@ private:
     bool m_advancedMode;
     bool m_followThroughErrorsEnabled;
     bool m_oneFingerPlay;
+    bool m_metronomeEnabled;
     bool m_pianoRollView;
     bool m_rhythmPractice;
     QString m_bookPath;
