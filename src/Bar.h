@@ -138,6 +138,7 @@ private:
         m_enableLooping = (m_loopingBars > 0.0)?true:false;
         m_enablePlayFromBar = (m_enableLooping || m_playFromBar > 0.0)?true:false;
     }
+    int clampTargetBar(double bar) const;
 
     qint64 m_deltaTime;
     qint64 m_beatLength; //in ppqn ticks

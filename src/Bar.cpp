@@ -84,8 +84,24 @@ qint64 CBar::addDeltaTime(qint64 ticks)
 
 qint64 CBar::goToBarNumer()
 {
-    const auto ticks = static_cast<qint64>(m_playFromBar - getCurrentBarPos()) * m_beatLength * SPEED_ADJUST_FACTOR + 1;
-    addDeltaTime(ticks);
+    if (m_beatLength <= 0 || m_barLength <= 0 || m_currentTimeSigTop <= 0 || m_currentTimeSigBottom <= 0)
+        return 0;
+
+    const int currentBar = m_barCounter;
+    const int targetBar = clampTargetBar(m_playFromBar);
+    int diffBars = targetBar - currentBar;
+    if (diffBars < 0)
+        diffBars = 0;
+
+    const qint64 ticks = static_cast<qint64>(diffBars) * m_barLength * SPEED_ADJUST_FACTOR;
+
+    m_barCounter = targetBar;
+    m_beatCounter = 0;
+    m_deltaTime = 0;
+
+    m_seekingBarNumber = false;
+    m_flushTicks = true;
+    m_eventBits |= EVENT_BITS_newBarNumber;
     return ticks;
 }
 
@@ -108,7 +124,7 @@ void CBar::checkGotoBar()
 
 void CBar::setPlayFromBar(double bar)
 {
-    m_playFromBar = bar;
+    m_playFromBar = clampTargetBar(bar);
     updatePlayRange();
     setupEnableFlags();
     checkGotoBar();
@@ -124,7 +140,7 @@ void CBar::setPlayFromBar(int bar, int beat, int ticks)
 
 void CBar::setPlayUptoBar(double endBar)
 {
-    setLoopingBars(endBar - m_playUptoBar);
+    setLoopingBars(endBar - m_playFromBar);
 }
 
 void CBar::setLoopingBars(double bars)
@@ -135,4 +151,15 @@ void CBar::setLoopingBars(double bars)
     updatePlayRange();
     setupEnableFlags();
     checkGotoBar();
+}
+
+int CBar::clampTargetBar(double bar) const
+{
+    if (bar < 0.0)
+        return 0;
+    // A generous upper bound prevents runaway seeks when bar count is unknown.
+    constexpr int MAX_SAFE_BAR = 100000;
+    if (bar > MAX_SAFE_BAR)
+        return MAX_SAFE_BAR;
+    return static_cast<int>(bar);
 }
