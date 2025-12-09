@@ -37,8 +37,97 @@
 #include "Score.h"
 #include "Piano.h"
 #include "Cfg.h"
+#include <atomic>
+#include <functional>
+#include <QElapsedTimer>
+#include <QMetaObject>
+#include <QMutexLocker>
+#include <QThread>
+#include <QTimer>
 
-playMode_t CConductor::m_playMode = PB_PLAY_MODE_listen;
+class ConductorWorker : public QObject
+{
+public:
+    ConductorWorker(CConductor* conductor, int intervalMs)
+        : QObject(nullptr),
+          m_conductor(conductor),
+          m_timer(nullptr),
+          m_elapsedTimer(),
+          m_running(false),
+          m_paused(true),
+          m_intervalMs(intervalMs)
+    {
+    }
+
+    void startLoop()
+    {
+        ensureTimer();
+        m_running.store(true, std::memory_order_relaxed);
+        m_paused.store(false, std::memory_order_relaxed);
+        m_elapsedTimer.restart();
+        if (m_timer && !m_timer->isActive())
+            m_timer->start();
+    }
+
+    void pauseLoop()
+    {
+        m_paused.store(true, std::memory_order_relaxed);
+        if (m_timer)
+            m_timer->stop();
+        m_elapsedTimer.invalidate();
+    }
+
+    void stopLoop()
+    {
+        m_running.store(false, std::memory_order_relaxed);
+        m_paused.store(true, std::memory_order_relaxed);
+        if (m_timer)
+            m_timer->stop();
+        m_elapsedTimer.invalidate();
+    }
+
+    void processOnce(qint64 msecTicks)
+    {
+        if (!m_running.load(std::memory_order_relaxed) || m_paused.load(std::memory_order_relaxed))
+            return;
+        m_conductor->realTimeEngine(msecTicks);
+    }
+
+private:
+    void handleTick()
+    {
+        if (!m_running.load(std::memory_order_relaxed) || m_paused.load(std::memory_order_relaxed))
+            return;
+
+        if (!m_elapsedTimer.isValid())
+            m_elapsedTimer.start();
+
+        qint64 elapsed = m_elapsedTimer.restart();
+        if (elapsed <= 0)
+            elapsed = m_intervalMs;
+        m_conductor->realTimeEngine(elapsed);
+    }
+
+    void ensureTimer()
+    {
+        if (m_timer)
+            return;
+        m_timer = new QTimer();
+        m_timer->setTimerType(Qt::PreciseTimer);
+        m_timer->setInterval(m_intervalMs);
+        m_timer->moveToThread(QThread::currentThread());
+        connect(m_timer, &QTimer::timeout, this, &ConductorWorker::handleTick, Qt::DirectConnection);
+    }
+
+    CConductor* m_conductor;
+    QTimer* m_timer;
+    QElapsedTimer m_elapsedTimer;
+    std::atomic<bool> m_running;
+    std::atomic<bool> m_paused;
+    int m_intervalMs;
+};
+
+std::atomic<playMode_t> CConductor::m_playMode{PB_PLAY_MODE_listen};
 
 CConductor::CConductor()
     : m_scoreWin(nullptr),
@@ -93,7 +182,16 @@ CConductor::CConductor()
       m_skill(0),
       m_mutePianistPart(false),
       m_latencyFix(0),
-      m_track2ChannelLookUp()
+      m_track2ChannelLookUp(),
+      m_pianistNoteStates(),
+      m_pianistGoodNotesDown(0),
+      m_pianistBadNotesDown(0),
+      m_savedChordLookUp(),
+      m_workerThread(new QThread(this)),
+      m_worker(nullptr),
+      m_workerIntervalMs(1),
+      m_songQueueMutex(),
+      m_wantedChordMutex()
 {
     setSpeed(1.0);
     setLatencyFix(0);
@@ -106,6 +204,12 @@ CConductor::CConductor()
 
     setPianoSoundPatches(1-1, 7-1); // 6-1
     m_tempo.setSavedWantedChord(&m_savedWantedChord);
+    resetPianistTracking();
+
+    m_worker = new ConductorWorker(this, m_workerIntervalMs);
+    m_worker->moveToThread(m_workerThread);
+    connect(m_workerThread, &QThread::finished, m_worker, &QObject::deleteLater);
+    m_workerThread->start();
 
     reset();
     rewind();
@@ -114,10 +218,225 @@ CConductor::CConductor()
 
 CConductor::~CConductor()
 {
+    stopWorker();
+    if (m_workerThread)
+    {
+        m_workerThread->quit();
+        m_workerThread->wait();
+    }
+    delete m_worker;
     delete m_songEventQueue;
     delete m_wantedChordQueue;
     delete m_savedNoteQueue;
     delete m_savedNoteOffQueue;
+}
+
+void CConductor::startWorker()
+{
+    if (!m_worker)
+        return;
+    if (m_workerThread && !m_workerThread->isRunning())
+        m_workerThread->start();
+    if (QThread::currentThread() == m_workerThread)
+        m_worker->startLoop();
+    else
+        QMetaObject::invokeMethod(m_worker, [this]() { m_worker->startLoop(); }, Qt::QueuedConnection);
+}
+
+void CConductor::pauseWorker()
+{
+    if (!m_worker)
+        return;
+    if (QThread::currentThread() == m_workerThread)
+        m_worker->pauseLoop();
+    else
+        QMetaObject::invokeMethod(m_worker, [this]() { m_worker->pauseLoop(); }, Qt::QueuedConnection);
+}
+
+void CConductor::stopWorker()
+{
+    if (!m_worker)
+        return;
+    if (QThread::currentThread() == m_workerThread)
+        m_worker->stopLoop();
+    else
+        QMetaObject::invokeMethod(m_worker, [this]() { m_worker->stopLoop(); }, Qt::QueuedConnection);
+}
+
+eventBits_t CConductor::takePendingEventBits()
+{
+    return m_realTimeEventBits.exchange(0, std::memory_order_acq_rel);
+}
+
+void CConductor::dispatchScrollDelta(qint64 ticks)
+{
+    QMetaObject::invokeMethod(this, [this, ticks]() {
+        if (m_scoreWin)
+            m_scoreWin->scrollDeltaTime(ticks);
+    }, Qt::QueuedConnection);
+}
+
+void CConductor::dispatchPlayedNoteColor(int note, CColor color, qint64 wantedDelta, qint64 pianistTiming)
+{
+    QMetaObject::invokeMethod(this, [this, note, color, wantedDelta, pianistTiming]() {
+        if (m_scoreWin)
+            m_scoreWin->setPlayedNoteColor(note, color, wantedDelta, pianistTiming);
+    }, Qt::QueuedConnection);
+}
+
+void CConductor::dispatchPianistNote(whichPart_t part, const CMidiEvent &midiNote, bool good)
+{
+    QMetaObject::invokeMethod(this, [this, part, midiNote, good]() {
+        if (m_piano)
+            m_piano->addPianistNote(part, midiNote, good);
+    }, Qt::QueuedConnection);
+}
+
+void CConductor::dispatchPianistNoteOff(int note, bool wasBad)
+{
+    QMetaObject::invokeMethod(this, [this, note, wasBad]() {
+        Q_UNUSED(wasBad);
+        if (m_piano)
+            m_piano->removePianistNote(note);
+    }, Qt::QueuedConnection);
+}
+
+void CConductor::dispatchPianoClear()
+{
+    QMetaObject::invokeMethod(this, [this]() {
+        if (m_piano)
+            m_piano->clear();
+    }, Qt::QueuedConnection);
+}
+
+void CConductor::dispatchRhythmTapping(bool enabled)
+{
+    QMetaObject::invokeMethod(this, [this, enabled]() {
+        if (m_piano)
+            m_piano->setRhythmTapping(enabled);
+    }, Qt::QueuedConnection);
+}
+
+bool CConductor::isInWorkerThread() const
+{
+    return m_workerThread && QThread::currentThread() == m_workerThread;
+}
+
+void CConductor::runOnWorker(const std::function<void()> &fn)
+{
+    if (!m_worker)
+        return;
+
+    if (isInWorkerThread())
+    {
+        fn();
+        return;
+    }
+    QMetaObject::invokeMethod(m_worker, fn, Qt::QueuedConnection);
+}
+
+void CConductor::clearRealtimeQueues()
+{
+    {
+        QMutexLocker locker(&m_songQueueMutex);
+        m_songEventQueue->clear();
+    }
+    {
+        QMutexLocker locker(&m_wantedChordMutex);
+        m_wantedChordQueue->clear();
+    }
+    m_savedNoteQueue->clear();
+    m_savedNoteOffQueue->clear();
+}
+
+void CConductor::resetPianistTracking()
+{
+    m_pianistNoteStates.fill(0);
+    m_pianistGoodNotesDown = 0;
+    m_pianistBadNotesDown = 0;
+    for (auto &saved : m_savedChordLookUp)
+    {
+        saved.pitchKey = 0;
+        saved.chord.clear();
+    }
+}
+
+void CConductor::updatePianistTrackingOn(const CMidiEvent &inputNote, bool goodSound)
+{
+    const int note = inputNote.note();
+    if (note < 0 || note >= static_cast<int>(m_pianistNoteStates.size()))
+        return;
+    const int current = m_pianistNoteStates[static_cast<size_t>(note)];
+    if (current != 0)
+        return;
+    if (goodSound)
+    {
+        m_pianistNoteStates[static_cast<size_t>(note)] = 1;
+        ++m_pianistGoodNotesDown;
+    }
+    else
+    {
+        m_pianistNoteStates[static_cast<size_t>(note)] = -1;
+        ++m_pianistBadNotesDown;
+    }
+}
+
+void CConductor::updatePianistTrackingOff(const CMidiEvent &inputNote, bool /*goodSound*/)
+{
+    const int note = inputNote.note();
+    if (note < 0 || note >= static_cast<int>(m_pianistNoteStates.size()))
+        return;
+    const int current = m_pianistNoteStates[static_cast<size_t>(note)];
+    if (current == 1)
+        --m_pianistGoodNotesDown;
+    else if (current == -1)
+        --m_pianistBadNotesDown;
+    m_pianistNoteStates[static_cast<size_t>(note)] = 0;
+}
+
+void CConductor::storeSavedChord(const CMidiEvent &midiNote, const CChord &chord)
+{
+    const int key = midiNote.note();
+    for (auto &savedChord : m_savedChordLookUp)
+    {
+        if (midiNote.type() == MIDI_NOTE_ON)
+        {
+            if (savedChord.pitchKey == 0)
+            {
+                savedChord.pitchKey = key;
+                savedChord.chord = chord;
+                return;
+            }
+        }
+        else if (midiNote.type() == MIDI_NOTE_OFF)
+        {
+            if (savedChord.pitchKey == key)
+            {
+                savedChord.pitchKey = 0;
+                savedChord.chord.clear();
+                return;
+            }
+        }
+    }
+    // fallback to first slot if no space
+    m_savedChordLookUp.front().pitchKey = key;
+    m_savedChordLookUp.front().chord = chord;
+}
+
+CChord CConductor::takeSavedChord(int key)
+{
+    for (auto &savedChord : m_savedChordLookUp)
+    {
+        if (savedChord.pitchKey == key)
+        {
+            savedChord.pitchKey = 0;
+            CChord chord = savedChord.chord;
+            savedChord.chord.clear();
+            return chord;
+        }
+    }
+    m_savedChordLookUp.back().chord.clear();
+    return m_savedChordLookUp.back().chord;
 }
 
 void CConductor::reset()
@@ -140,14 +459,48 @@ void CConductor::resetTrackChannelMap()
 //! add a midi event to be analysed and displayed on the score
 void CConductor::midiEventInsert(CMidiEvent event)
 {
+    QMutexLocker locker(&m_songQueueMutex);
     m_songEventQueue->push(event);
 }
 
 //! first check if there is space to add a midi event
 int CConductor::midiEventSpace()
 {
+    QMutexLocker locker(&m_songQueueMutex);
     return m_songEventQueue->space();
 
+}
+
+//! add a chord to be played by the pianist
+void CConductor::chordEventInsert(CChord chord)
+{
+    QMutexLocker locker(&m_wantedChordMutex);
+    m_wantedChordQueue->push(chord);
+}
+
+//! first check if there is space to add a chord event
+int CConductor::chordEventSpace()
+{
+    QMutexLocker locker(&m_wantedChordMutex);
+    return m_wantedChordQueue->space();
+}
+
+int CConductor::songEventQueueLength() const
+{
+    QMutexLocker locker(&m_songQueueMutex);
+    return m_songEventQueue->length();
+}
+
+CMidiEvent CConductor::songEventAt(int index) const
+{
+    QMutexLocker locker(&m_songQueueMutex);
+    return m_songEventQueue->index(index);
+}
+
+void CConductor::clearWantedChordQueue()
+{
+    QMutexLocker locker(&m_wantedChordMutex);
+    m_wantedChordQueue->clear();
 }
 
 void CConductor::channelSoundOff(int channel)
@@ -167,6 +520,12 @@ void CConductor::channelSoundOff(int channel)
 
 void CConductor::allSoundOff()
 {
+    if (!isInWorkerThread())
+    {
+        runOnWorker([this]() { allSoundOff(); });
+        return;
+    }
+
     for (int channel = 0; channel < MAX_MIDI_CHANNELS; channel++)
     {
         if (channel != m_pianistGoodChan)
@@ -178,6 +537,12 @@ void CConductor::allSoundOff()
 
 void CConductor::resetAllChannels()
 {
+    if (!isInWorkerThread())
+    {
+        runOnWorker([this]() { resetAllChannels(); });
+        return;
+    }
+
     CMidiEvent midi;
     for (int channel = 0; channel < MAX_MIDI_CHANNELS; channel++)
     {
@@ -191,6 +556,8 @@ int CConductor::calcBoostVolume(int channel, int volume)
 {
     int returnVolume;
     bool activePart;
+    const int activeChannel = m_activeChannel.load(std::memory_order_relaxed);
+    const playMode_t playMode = m_playMode.load(std::memory_order_relaxed);
 
     if (volume == -1)
         volume = m_savedMainVolume[channel];
@@ -199,9 +566,9 @@ int CConductor::calcBoostVolume(int channel, int volume)
 
     returnVolume = volume;
     activePart = false;
-    if (CNote::hasPianoPart(m_activeChannel))
+    if (CNote::hasPianoPart(activeChannel))
     {
-        if (m_playMode == PB_PLAY_MODE_listen) // only boost one hand in listen mode
+        if (playMode == PB_PLAY_MODE_listen) // only boost one hand in listen mode
         {
             if (channel == CNote::leftHandChan() && CNote::getActiveHand() != PB_PART_right)
                 activePart = true;
@@ -216,10 +583,10 @@ int CConductor::calcBoostVolume(int channel, int volume)
     }
     else
     {
-        if (channel == m_activeChannel)
+        if (channel == activeChannel)
             activePart= true;
     }
-    if (channel == m_activeChannel)
+    if (channel == activeChannel)
         activePart= true;
 
     //if (channel == 5)  activePart= true; // for debugging
@@ -250,6 +617,12 @@ int CConductor::calcBoostVolume(int channel, int volume)
 /* send boost volume by adjusting all channels */
 void CConductor::outputBoostVolume()
 {
+    if (!isInWorkerThread())
+    {
+        runOnWorker([this]() { outputBoostVolume(); });
+        return;
+    }
+
     for (int chan = 0; chan < MAX_MIDI_CHANNELS; chan++ )
     {
         if (hasPianistKeyboardChannel(chan))
@@ -285,32 +658,43 @@ void CConductor::setActiveHand(whichPart_t hand)
     if (CNote::getActiveHand() == hand)
         return;
     CNote::setActiveHand(hand);
-    outputBoostVolume();
-    resetWantedChord();
-
-    findSplitPoint();
+    runOnWorker([this]() {
+        outputBoostVolume();
+        resetWantedChord();
+        findSplitPoint();
+    });
     forceScoreRedraw();
 }
 
 void CConductor::setPlayMode(playMode_t mode)
 {
-    m_playMode = mode;
-    if ( m_playMode == PB_PLAY_MODE_listen )
-        resetWantedChord();
-    outputBoostVolume();
-    m_piano->setRhythmTapping(m_playMode == PB_PLAY_MODE_rhythmTapping);
+    m_playMode.store(mode, std::memory_order_relaxed);
+    runOnWorker([this, mode]() {
+        if ( mode == PB_PLAY_MODE_listen )
+            resetWantedChord();
+        outputBoostVolume();
+    });
+    dispatchRhythmTapping(mode == PB_PLAY_MODE_rhythmTapping);
 }
 
 void CConductor::setActiveChannel(int channel)
 {
-    m_activeChannel = channel;
-    outputBoostVolume();
-    resetWantedChord();
-    fetchNextChord();
+    runOnWorker([this, channel]() {
+        m_activeChannel.store(channel, std::memory_order_relaxed);
+        outputBoostVolume();
+        resetWantedChord();
+        fetchNextChord();
+    });
 }
 
 void CConductor::outputPianoVolume()
 {
+    if (!isInWorkerThread())
+    {
+        runOnWorker([this]() { outputPianoVolume(); });
+        return;
+    }
+
     CMidiEvent event;
     int volume = 127;
     // if piano volume is between -100 and 0 reduce the volume accordingly
@@ -325,6 +709,12 @@ void CConductor::outputPianoVolume()
 
 void CConductor::updatePianoSounds()
 {
+    if (!isInWorkerThread())
+    {
+        runOnWorker([this]() { updatePianoSounds(); });
+        return;
+    }
+
     if (m_suppressPianistPatchUpdates)
         return;
 
@@ -351,6 +741,12 @@ void CConductor::setPianistProgram(int program)
 
     if (m_suppressPianistPatchUpdates)
         return;
+
+    if (!isInWorkerThread())
+    {
+        runOnWorker([this, program]() { setPianistProgram(program); });
+        return;
+    }
 
     CMidiEvent event;
     event.programChangeEvent(0, m_pianistGoodChan, program);
@@ -382,31 +778,30 @@ void CConductor::reconnectMidi()
 void CConductor::playMusic(bool start)
 {
     reconnectMidi();
-    m_playing = start;
-    allSoundOff();
-    if (start)
+    m_playing.store(start, std::memory_order_relaxed);
+    auto work = [this, start]()
     {
-        resetAllChannels();
-        m_metronomeTickAccum = 0;
-        m_metronomeBeatIndex = 0;
-
-        testWrongNoteSound(false);
-        outputBoostVolume();
-        if (seekingBarNumber())
-            resetWantedChord();
-
-        /*
-        const unsigned char gsModeEnterData[] =  {0xf0, 0x41, 0x10, 0x42, 0x12, 0x40, 0x00, 0x7f, 0x00, 0x41, 0xf7};
-
-        for (auto &d : gsModeEnterData)
+        allSoundOff();
+        if (start)
         {
-            event.collateRawByte(0, d);
-            playTrackEvent(event);
+            resetAllChannels();
+            m_metronomeTickAccum = 0;
+            m_metronomeBeatIndex = 0;
+
+            testWrongNoteSound(false);
+            outputBoostVolume();
+            if (seekingBarNumber())
+                resetWantedChord();
         }
-        event.outputCollatedRawBytes(0);
-        playTrackEvent(event);
-        */
-    }
+    };
+
+    if (m_worker)
+        QMetaObject::invokeMethod(m_worker, work, Qt::QueuedConnection);
+
+    if (start)
+        startWorker();
+    else
+        pauseWorker();
 }
 
 // This will allow us to map midi tracks onto midi channels
@@ -459,6 +854,12 @@ void CConductor::outputSavedNotes()
 
 void CConductor::resetWantedChord()
 {
+    if (!isInWorkerThread())
+    {
+        runOnWorker([this]() { resetWantedChord(); });
+        return;
+    }
+
     m_wantedChord.clear();
     ppDEBUG_CONDUCTOR(("resetWantedChord m_chordDeltaTime %d m_playingDeltaTime %d", m_chordDeltaTime, m_playingDeltaTime ));
 
@@ -477,6 +878,7 @@ void CConductor::setFollowSkillAdvanced(bool enable)
     if (m_settings==nullptr || m_scoreWin == nullptr)
         return;
 
+    const playMode_t playMode = m_playMode.load(std::memory_order_relaxed);
     m_settings-> setAdvancedMode(enable);
 
     if (getLatencyFix() > 0)
@@ -489,7 +891,7 @@ void CConductor::setFollowSkillAdvanced(bool enable)
         enable = false;
     if (cfg_stopPointMode == PB_STOP_POINT_MODE_afterTheBeat)
         enable = true;
-    if (m_playMode == PB_PLAY_MODE_rhythmTapping)
+    if (playMode == PB_PLAY_MODE_rhythmTapping)
         enable = true;
 
     m_followSkillAdvanced = enable;
@@ -518,6 +920,12 @@ void CConductor::findSplitPoint()
 
 void CConductor::turnOnKeyboardLights(bool on)
 {
+    if (!isInWorkerThread())
+    {
+        runOnWorker([this, on]() { turnOnKeyboardLights(on); });
+        return;
+    }
+
     CMidiEvent event;
 
     // exit if not enable
@@ -542,27 +950,39 @@ void CConductor::turnOnKeyboardLights(bool on)
 
 void CConductor::fetchNextChord()
 {
+    if (!isInWorkerThread())
+    {
+        runOnWorker([this]() { fetchNextChord(); });
+        return;
+    }
+
     m_followState = PB_FOLLOW_searching;
     m_followPlayingTimeOut = false;
 
     outputSavedNotes();
     turnOnKeyboardLights(false);
 
-    do // Remove notes or chords that are out of our range
+    while (true) // Remove notes or chords that are out of our range
     {
-        if (m_wantedChordQueue->length() == 0)
+        CChord nextChord;
         {
-            m_wantedChord.clear();
-            m_pianistSplitPoint = MIDDLE_C;
-            return;
+            QMutexLocker locker(&m_wantedChordMutex);
+            if (m_wantedChordQueue->length() == 0)
+            {
+                m_wantedChord.clear();
+                m_pianistSplitPoint = MIDDLE_C;
+                return;
+            }
+            nextChord = m_wantedChordQueue->pop();
         }
 
-        m_wantedChord = m_wantedChordQueue->pop();
+        m_wantedChord = nextChord;
         m_savedWantedChord = m_wantedChord;
         m_chordDeltaTime -= m_wantedChord.getDeltaTime() * SPEED_ADJUST_FACTOR;
         m_pianistTiming = m_chordDeltaTime;
+        if (m_wantedChord.trimOutOfRangeNotes(m_transpose) != 0)
+            break;
     }
-    while (m_wantedChord.trimOutOfRangeNotes(m_transpose)==0);
 
     // now find the split point
     findSplitPoint();
@@ -592,7 +1012,7 @@ void CConductor::playWantedChord (CChord chord, CMidiEvent inputNote)
 
 bool CConductor::validatePianistChord()
 {
-    if (m_piano->pianistBadNotesDown() >= 2)
+    if (pianistBadNotesDown() >= 2)
         return false;
 
     const bool oneFingerPlay = m_settings && m_settings->oneFingerPlay();
@@ -612,7 +1032,8 @@ bool CConductor::validatePianistChord()
  */
 void CConductor::expandPianistInput(CMidiEvent inputNote)
 {
-    if (m_playMode == PB_PLAY_MODE_rhythmTapping)
+    const playMode_t playMode = m_playMode.load(std::memory_order_relaxed);
+    if (playMode == PB_PLAY_MODE_rhythmTapping)
     {
         CChord chord;
         int i;
@@ -625,7 +1046,7 @@ void CConductor::expandPianistInput(CMidiEvent inputNote)
 
             if (inputNote.type() == MIDI_NOTE_OFF)
             {
-                chord = m_piano->removeSavedChord(inputNote.note());
+                chord = takeSavedChord(inputNote.note());
                 for(i = 0; i < chord.length(); i++)
                 {
                     inputNote.setNote( chord.getNote(i).pitch());
@@ -652,7 +1073,7 @@ void CConductor::expandPianistInput(CMidiEvent inputNote)
                 }
             }
             if (notesFound > 0)
-                m_piano->addSavedChord(inputNote, chordForOneHand);
+                storeSavedChord(inputNote, chordForOneHand);
             else
             {
                 inputNote.setChannel(MIDI_DRUM_CHANNEL);
@@ -681,6 +1102,7 @@ void CConductor::pianistInput(CMidiEvent inputNote)
 
     whichPart_t hand;
     hand = (inputNote.note() >= m_pianistSplitPoint)? PB_PART_right : PB_PART_left;
+    const playMode_t playMode = m_playMode.load(std::memory_order_relaxed);
 
     // for rhythm tapping
     if ( inputNote.channel() == MIDI_DRUM_CHANNEL)
@@ -692,13 +1114,14 @@ void CConductor::pianistInput(CMidiEvent inputNote)
         if ( validatePianistNote(inputNote) == true)
         {
             m_goodPlayedNotes.addNote(hand, inputNote.note());
-            m_piano->addPianistNote(hand, inputNote,true);
+            updatePianistTrackingOn(inputNote, true);
+            dispatchPianistNote(hand, inputNote,true);
             qint64 pianistTiming;
-            if  ( ( cfg_timingMarkersFlag && m_followSkillAdvanced ) || m_playMode == PB_PLAY_MODE_rhythmTapping )
+            if  ( ( cfg_timingMarkersFlag && m_followSkillAdvanced ) || playMode == PB_PLAY_MODE_rhythmTapping )
                 pianistTiming = m_pianistTiming;
             else
                 pianistTiming = NOT_USED;
-            m_scoreWin->setPlayedNoteColor(inputNote.note(),
+            dispatchPlayedNoteColor(inputNote.note(),
                         (!m_followPlayingTimeOut)? Cfg::playedGoodColor():Cfg::playedBadColor(),
                         m_chordDeltaTime, pianistTiming);
 
@@ -712,8 +1135,11 @@ void CConductor::pianistInput(CMidiEvent inputNote)
                 // count the good notes so that the live percentage looks OK
                 m_rating.totalNotes(expectedNotesForRating());
                 m_rating.calculateAccuracy();
-                m_settings->pianistActive();
-                if (m_rating.isAccuracyGood() || m_playMode == PB_PLAY_MODE_playAlong)
+                QMetaObject::invokeMethod(this, [this]() {
+                    if (m_settings)
+                        m_settings->pianistActive();
+                }, Qt::QueuedConnection);
+                if (m_rating.isAccuracyGood() || playMode == PB_PLAY_MODE_playAlong)
                     setFollowSkillAdvanced(true); // change the skill level only when they are good enough
                 else
                     setFollowSkillAdvanced(false);
@@ -722,19 +1148,25 @@ void CConductor::pianistInput(CMidiEvent inputNote)
         }
         else
         {
-            if (m_playing == true)
+            if (m_playing.load(std::memory_order_relaxed) == true)
             {
                 goodSound = false;
 
-                m_piano->addPianistNote(hand, inputNote, false);
+                updatePianistTrackingOn(inputNote, false);
+                dispatchPianistNote(hand, inputNote, false);
                 if (!(m_settings && m_settings->rhythmPractice()))
                     m_rating.wrongNotes(1);
 
-                if (m_settings->followThroughErrors() && m_playMode == PB_PLAY_MODE_followYou) // If the setting is checked, errors cause following too
+                if (m_settings->followThroughErrors() && playMode == PB_PLAY_MODE_followYou) // If the setting is checked, errors cause following too
                   {
+                    auto clearPianistState = [this]() {
+                        dispatchPianoClear();
+                        resetPianistTracking();
+                    };
+
                     if (m_chordDeltaTime <= -m_cfg_playZoneEarly) // We're hitting bad notes, but earlier than the zone (so ignore them)
                       {
-                    m_piano->clear();
+                    clearPianistState();
                     m_savedNoteQueue->clear();
                     m_savedNoteOffQueue->clear();
                       }
@@ -751,14 +1183,17 @@ void CConductor::pianistInput(CMidiEvent inputNote)
                     // Was the next note the one keyed by accident (dyslexia)?  If so, validate it instead and continue as usual.
                     if (m_wantedChord.searchChord(inputNote.note(), m_transpose)) // replaces validatePianistNote ignoring out-of-zone
                       {
+                        goodSound = true;
+                        updatePianistTrackingOff(inputNote, false);
+                        updatePianistTrackingOn(inputNote, true);
                         m_goodPlayedNotes.addNote(hand, inputNote.note());
-                        m_piano->addPianistNote(hand, inputNote,true);
+                        dispatchPianistNote(hand, inputNote,true);
                         qint64 pianistTiming;
-                        if  ( ( cfg_timingMarkersFlag && m_followSkillAdvanced ) || m_playMode == PB_PLAY_MODE_rhythmTapping )
+                        if  ( ( cfg_timingMarkersFlag && m_followSkillAdvanced ) || playMode == PB_PLAY_MODE_rhythmTapping )
                           pianistTiming = m_pianistTiming;
                         else
                           pianistTiming = NOT_USED;
-                        m_scoreWin->setPlayedNoteColor(inputNote.note(),
+                        dispatchPlayedNoteColor(inputNote.note(),
                                     (!m_followPlayingTimeOut)? Cfg::playedGoodColor():Cfg::playedBadColor(),
                             m_chordDeltaTime, pianistTiming);
 
@@ -772,8 +1207,11 @@ void CConductor::pianistInput(CMidiEvent inputNote)
                         // count the good notes so that the live percentage looks OK
                         m_rating.totalNotes(m_wantedChord.length());
                         m_rating.calculateAccuracy();
-                        m_settings->pianistActive();
-                        if (m_rating.isAccuracyGood() || m_playMode == PB_PLAY_MODE_playAlong)
+                        QMetaObject::invokeMethod(this, [this]() {
+                            if (m_settings)
+                                m_settings->pianistActive();
+                        }, Qt::QueuedConnection);
+                        if (m_rating.isAccuracyGood() || playMode == PB_PLAY_MODE_playAlong)
                           setFollowSkillAdvanced(true); // change the skill level only when they are good enough
                         else
                           setFollowSkillAdvanced(false);
@@ -782,7 +1220,7 @@ void CConductor::pianistInput(CMidiEvent inputNote)
                       }
 
                     // Clear & ignore any further slips until in range of the next note's zone
-                    m_piano->clear();
+                    clearPianistState();
                     m_savedNoteQueue->clear();
                     m_savedNoteOffQueue->clear();
 
@@ -791,20 +1229,27 @@ void CConductor::pianistInput(CMidiEvent inputNote)
 
             }
             else
-                m_piano->addPianistNote(hand, inputNote, true);
+            {
+                updatePianistTrackingOn(inputNote, true);
+                dispatchPianistNote(hand, inputNote, true);
+            }
         }
     }
     else if (inputNote.type() == MIDI_NOTE_OFF)
     {
-        if (m_piano->removePianistNote(inputNote.note()) ==  true)
+        const bool wasBad = (inputNote.note() >= 0 && inputNote.note() < static_cast<int>(m_pianistNoteStates.size()) &&
+                             m_pianistNoteStates[static_cast<size_t>(inputNote.note())] == -1);
+        if (wasBad)
             goodSound = false;
+        updatePianistTrackingOff(inputNote, goodSound);
         bool hasNote = m_goodPlayedNotes.removeNote(inputNote.note());
 
         if (hasNote)
-            m_scoreWin->setPlayedNoteColor(inputNote.note(),
+            dispatchPlayedNoteColor(inputNote.note(),
                     (!m_followPlayingTimeOut)? Cfg::noteColor():Cfg::playedStoppedColor(),
                     m_chordDeltaTime);
 
+        dispatchPianistNoteOff(inputNote.note(), wasBad);
         outputSavedNotesOff();
     }
 
@@ -818,7 +1263,7 @@ void CConductor::pianistInput(CMidiEvent inputNote)
             bool playDrumBeat = false;
             if ( inputNote.channel() != MIDI_DRUM_CHANNEL)
             {
-                if (cfg_rhythmTapping != PB_RHYTHM_TAP_drumsOnly || m_playMode != PB_PLAY_MODE_rhythmTapping)
+                if (cfg_rhythmTapping != PB_RHYTHM_TAP_drumsOnly || playMode != PB_PLAY_MODE_rhythmTapping)
                 {
                     inputNote.setChannel(m_pianistGoodChan);
                     playTrackEvent( inputNote );
@@ -829,7 +1274,7 @@ void CConductor::pianistInput(CMidiEvent inputNote)
                 playDrumBeat = true;
             }
 
-            if (cfg_rhythmTapping != PB_RHYTHM_TAP_mellodyOnly && m_playMode == PB_PLAY_MODE_rhythmTapping)
+            if (cfg_rhythmTapping != PB_RHYTHM_TAP_mellodyOnly && playMode == PB_PLAY_MODE_rhythmTapping)
                 playDrumBeat = true;
 
             if (playDrumBeat)
@@ -844,7 +1289,7 @@ void CConductor::pianistInput(CMidiEvent inputNote)
     else
     {
         inputNote.setChannel(m_pianistBadChan);
-        if (m_playMode == PB_PLAY_MODE_rhythmTapping)
+        if (playMode == PB_PLAY_MODE_rhythmTapping)
         {
             inputNote.setChannel(MIDI_DRUM_CHANNEL);
             ppLogTrace("note %d", inputNote.note());
@@ -871,14 +1316,15 @@ void CConductor::pianistInput(CMidiEvent inputNote)
 
 void CConductor::addDeltaTime(qint64 ticks)
 {
-    m_scoreWin->scrollDeltaTime(ticks);
+    dispatchScrollDelta(ticks);
     m_playingDeltaTime += ticks;
     m_chordDeltaTime += ticks;
 }
 
 void CConductor::followPlaying()
 {
-    if ( m_playMode == PB_PLAY_MODE_listen )
+    const playMode_t playMode = m_playMode.load(std::memory_order_relaxed);
+    if ( playMode == PB_PLAY_MODE_listen )
         return;
 
     if (m_wantedChord.length() == 0)
@@ -892,7 +1338,7 @@ void CConductor::followPlaying()
         if (deltaAdjustL(m_chordDeltaTime) > -m_stopPoint )
             fetchNextChord();
     }
-    else if ( m_playMode == PB_PLAY_MODE_followYou ||  m_playMode == PB_PLAY_MODE_rhythmTapping )
+    else if ( playMode == PB_PLAY_MODE_followYou ||  playMode == PB_PLAY_MODE_rhythmTapping )
     {
         if (deltaAdjustL(m_chordDeltaTime) > -m_cfg_earlyNotesPoint )
             m_followState = PB_FOLLOW_earlyNotes;
@@ -903,7 +1349,7 @@ void CConductor::followPlaying()
             addDeltaTime( -m_stopPoint*SPEED_ADJUST_FACTOR - m_chordDeltaTime);
         }
     }
-    else // m_playMode == PB_PLAY_MODE_playAlong
+    else // playMode == PB_PLAY_MODE_playAlong
     {
         if (m_chordDeltaTime > m_cfg_playZoneLate )
         {
@@ -936,9 +1382,14 @@ void CConductor::findImminentNotesOff()
     {
         if (event.type() == MIDI_NOTE_OFF )
             m_savedNoteOffQueue->push(event);
-        if ( i >= m_songEventQueue->length())
-            break;
-        event = m_songEventQueue->index(i);
+        CMidiEvent peekedEvent;
+        {
+            QMutexLocker locker(&m_songQueueMutex);
+            if ( i >= m_songEventQueue->length())
+                break;
+            peekedEvent = m_songEventQueue->index(i);
+        }
+        event = peekedEvent;
         aheadDelta -= event.deltaTime();
         i++;
     }
@@ -950,7 +1401,7 @@ void CConductor::missedNotesColor(CColor color)
     {
         CNote note = m_wantedChord.getNote(i);
         if (m_goodPlayedNotes.searchChord(note.pitch(),m_transpose) == false)
-            m_scoreWin->setPlayedNoteColor(note.pitch() + m_transpose, color, m_chordDeltaTime);
+            dispatchPlayedNoteColor(note.pitch() + m_transpose, color, m_chordDeltaTime);
     }
 }
 
@@ -999,7 +1450,7 @@ void CConductor::realTimeEngine(qint64 mSecTicks)
                 missedNotesColor(Cfg::playedStoppedColor());
                 findImminentNotesOff();
                 // Don't keep any saved notes off if there are no notes down
-                if (m_piano->pianistAllNotesDown() == 0)
+                if (pianistAllNotesDown() == 0)
                     outputSavedNotesOff();
                 m_silenceTimeOut = Cfg::silenceTimeOut();
             }
@@ -1008,7 +1459,7 @@ void CConductor::realTimeEngine(qint64 mSecTicks)
     }
 
     m_silenceTimeOut = 0;
-    if (m_playing == false)
+    if (!m_playing.load(std::memory_order_relaxed))
         return;
 
     if (seekingBarNumber())
@@ -1021,17 +1472,21 @@ void CConductor::realTimeEngine(qint64 mSecTicks)
     if (seekingBarNumber())
         ticks = m_bar.goToBarNumer();
 
-    setEventBits( m_bar.readEventBits());
+    const eventBits_t barBits = m_bar.readEventBits();
+    setEventBits(barBits);
+    if (barBits & EVENT_BITS_newBarNumber)
+        emit barChanged(m_bar.getBarNumber());
 
 #if OPTION_DEBUG_CONDUCTOR
-    if (m_realTimeEventBits | EVENT_BITS_newBarNumber)
+    if (m_realTimeEventBits.load(std::memory_order_relaxed) | EVENT_BITS_newBarNumber)
     {
         ppDEBUG_CONDUCTOR(("m_savedNoteQueue %d m_playingDeltaTime %d",m_savedNoteQueue->space() , m_playingDeltaTime ));
-        ppDEBUG_CONDUCTOR(("getfollowState() %d  %d %d",getfollowState() , m_leadLagAdjust, m_songEventQueue->length() ));
+        ppDEBUG_CONDUCTOR(("getfollowState() %d  %d %d",getfollowState() , m_leadLagAdjust, songEventQueueLength() ));
     }
 #endif
 
     addDeltaTime(ticks);
+    emit tickAdvanced(mSecTicks, ticks);
 
     if (Cfg::metronomeEnabled && ticks > 0)
     {
@@ -1056,16 +1511,25 @@ void CConductor::realTimeEngine(qint64 mSecTicks)
     }
 
     followPlaying();
+    const playMode_t playMode = m_playMode.load(std::memory_order_relaxed);
     int type;
     while ( m_playingDeltaTime >= m_leadLagAdjust)
     {
         type = m_nextMidiEvent.type();
 
-        if (m_songEventQueue->length() == 0 && type == MIDI_PB_EOF)
+        int songQueueLength = 0;
+        {
+            QMutexLocker locker(&m_songQueueMutex);
+            songQueueLength = m_songEventQueue->length();
+        }
+
+        if (songQueueLength == 0 && type == MIDI_PB_EOF)
         {
             ppLogInfo("The End of the song");
             setEventBits(EVENT_BITS_playingStopped);
-            m_playing = false;
+            m_playing.store(false, std::memory_order_relaxed);
+            emit songEnded();
+            pauseWorker();
             break;
         }
 
@@ -1073,6 +1537,7 @@ void CConductor::realTimeEngine(qint64 mSecTicks)
         {
             m_tempo.setMidiTempo(m_nextMidiEvent.data1());
             m_leadLagAdjust = m_tempo.mSecToTicks( -getLatencyFix() );
+            emit tempoChanged(m_tempo.getEffectiveBpm());
         }
         else if (type == MIDI_PB_timeSignature)
         {
@@ -1088,7 +1553,7 @@ void CConductor::realTimeEngine(qint64 mSecTicks)
             if (!hasPianistKeyboardChannel(channel))
             {
                 if (getfollowState() >= PB_FOLLOW_earlyNotes &&
-                        (m_playMode == PB_PLAY_MODE_followYou || m_playMode == PB_PLAY_MODE_rhythmTapping) &&
+                        (playMode == PB_PLAY_MODE_followYou || playMode == PB_PLAY_MODE_rhythmTapping) &&
                         !seekingBarNumber() &&
                         m_followSkillAdvanced == false)
                 {
@@ -1109,13 +1574,20 @@ void CConductor::realTimeEngine(qint64 mSecTicks)
                 else
                 {
                     playTransposeEvent(m_nextMidiEvent); // Play the midi note or event
-                    ppDEBUG_CONDUCTOR(("playEvent() chan %d type %d note %d", m_nextMidiEvent.channel() , m_nextMidiEvent.type() , m_nextMidiEvent.note(), m_songEventQueue->length() ));
+                    ppDEBUG_CONDUCTOR(("playEvent() chan %d type %d note %d", m_nextMidiEvent.channel() , m_nextMidiEvent.type() , m_nextMidiEvent.note(), songEventQueueLength() ));
                 }
             }
         }
-        if (m_songEventQueue->length() > 0)
-            m_nextMidiEvent = m_songEventQueue->pop();
-        else
+        bool hasNextEvent = false;
+        {
+            QMutexLocker locker(&m_songQueueMutex);
+            if (m_songEventQueue->length() > 0)
+            {
+                m_nextMidiEvent = m_songEventQueue->pop();
+                hasNextEvent = true;
+            }
+        }
+        if (!hasNextEvent)
         {
             ppDEBUG_CONDUCTOR(("no data in song queue"));
             m_nextMidiEvent.clear();
@@ -1129,6 +1601,8 @@ void CConductor::realTimeEngine(qint64 mSecTicks)
 
 void CConductor::rewind()
 {
+    pauseWorker();
+    m_playing.store(false, std::memory_order_relaxed);
     for (int chan = 0; chan < MAX_MIDI_CHANNELS; chan++)
     {
         m_savedMainVolume[chan] = 100;
@@ -1138,16 +1612,13 @@ void CConductor::rewind()
     m_playingDeltaTime = 0;
     m_tempo.reset();
 
-    m_songEventQueue->clear();
-    m_savedNoteQueue->clear();
-    m_savedNoteOffQueue->clear();
-    m_wantedChordQueue->clear();
+    clearRealtimeQueues();
     m_nextMidiEvent.clear();
     m_bar.rewind();
 
     m_goodPlayedNotes.clear();  // The good notes the pianist plays
-    if (m_piano)
-        m_piano->clear();
+    dispatchPianoClear();
+    resetPianistTracking();
     resetWantedChord();
     setFollowSkillAdvanced(false);
     m_metronomeTickAccum = 0;

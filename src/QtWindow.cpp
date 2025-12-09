@@ -175,6 +175,11 @@ QtWindow::QtWindow()
 
     m_song->init2(m_score, m_settings);
 
+    connect(m_song, &CSong::tickAdvanced, m_glWidget, &CGLView::onTickAdvanced, Qt::QueuedConnection);
+    connect(m_song, &CSong::barChanged, m_glWidget, &CGLView::onBarChanged, Qt::QueuedConnection);
+    connect(m_song, &CSong::songEnded, m_glWidget, &CGLView::onSongEnded, Qt::QueuedConnection);
+    connect(m_song, &CSong::tempoChanged, m_glWidget, &CGLView::onTempoChanged, Qt::QueuedConnection);
+
     m_sidePanel->init(m_song, m_song->getTrackList(), m_topBar);
     m_topBar->init(m_song);
 

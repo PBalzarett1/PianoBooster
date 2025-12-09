@@ -167,14 +167,14 @@ void  CSong::setPlayMode(playMode_t mode)
 
 void CSong::regenerateChordQueue()
 {
-    m_wantedChordQueue->clear();
+    clearWantedChordQueue();
     m_findChord.reset();
 
-    const int length = m_songEventQueue->length();
+    const int length = songEventQueueLength();
 
     for (int i = 0; i < length; i++)
     {
-        const CMidiEvent event = m_songEventQueue->index(i);
+        const CMidiEvent event = songEventAt(i);
         insertChordIfFound(event);
     }
     resetWantedChord();
@@ -188,8 +188,7 @@ void CSong::refreshScroll()
 
 eventBits_t CSong::task(qint64 ticks)
 {
-    realTimeEngine(ticks);
-
+    Q_UNUSED(ticks);
     while (true)
     {
         if (m_reachedMidiEof == true)
@@ -228,7 +227,6 @@ eventBits_t CSong::task(qint64 ticks)
         // carry on with the data until we reach the bar we want
         if (seekingBarNumber() && m_reachedMidiEof == false && playingMusic())
         {
-            realTimeEngine(0);
             m_scoreWin->drawScrollingSymbols(false); // don't display any thing just  remove from the queue
         }
         else
@@ -236,9 +234,7 @@ eventBits_t CSong::task(qint64 ticks)
     }
 
 exitTask:
-    eventBits_t eventBits = m_realTimeEventBits;
-    m_realTimeEventBits = 0;
-    return eventBits;
+    return takePendingEventBits();
 }
 
 static const struct pcNote_s

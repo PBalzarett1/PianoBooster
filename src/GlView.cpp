@@ -77,6 +77,27 @@ CGLView::~CGLView()
     m_titleHeight = 0;
 }
 
+void CGLView::onTickAdvanced(qint64 msecDelta, qint64 /*tickDelta*/)
+{
+    m_displayUpdateTicks += msecDelta;
+}
+
+void CGLView::onBarChanged(int /*barNumber*/)
+{
+    m_forceBarRedraw = REDRAW_COUNT;
+    m_eventBits |= EVENT_BITS_newBarNumber;
+}
+
+void CGLView::onSongEnded()
+{
+    m_eventBits |= EVENT_BITS_playingStopped;
+}
+
+void CGLView::onTempoChanged(double /*bpm*/)
+{
+    m_forceRatingRedraw = qMax(m_forceRatingRedraw, 1);
+}
+
 QSize CGLView::minimumSizeHint() const
 {
     return QSize(200, 200);

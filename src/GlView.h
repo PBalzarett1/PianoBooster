@@ -55,6 +55,12 @@ public:
     void stopTimerEvent();
     void startTimerEvent();
 
+public slots:
+    void onTickAdvanced(qint64 msecDelta, qint64 tickDelta);
+    void onBarChanged(int barNumber);
+    void onSongEnded();
+    void onTempoChanged(double bpm);
+
 protected:
     void timerEvent(QTimerEvent *event);
     void mediaTimerEvent(int ticks);

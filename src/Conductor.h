@@ -37,6 +37,16 @@
 #include "Rating.h"
 #include "Tempo.h"
 #include "Bar.h"
+#include "StavePosition.h"
+
+#include <QMutex>
+#include <array>
+#include <atomic>
+#include <functional>
+
+class QThread;
+class QBasicTimer;
+class ConductorWorker;
 
 class CScore;
 class CPiano;
@@ -74,6 +84,7 @@ typedef enum {
  */
 class CConductor : public CMidiDevice
 {
+    Q_OBJECT
 public:
     CConductor();
     ~CConductor();
@@ -86,11 +97,15 @@ public:
     //! first check if there is space to add a midi event
     int midiEventSpace();
 
+    eventBits_t takePendingEventBits();
     //! add a chord to be played by the pianist
-    void chordEventInsert(CChord chord) {m_wantedChordQueue->push(chord);}
+    void chordEventInsert(CChord chord);
 
     //! first check if there is space to add a chord event
-    int chordEventSpace() { return m_wantedChordQueue->space();}
+    int chordEventSpace();
+    int songEventQueueLength() const;
+    CMidiEvent songEventAt(int index) const;
+    void clearWantedChordQueue();
 
     void rewind();
 
@@ -99,7 +114,7 @@ public:
 
     void realTimeEngine(qint64 mSecTicks);
     void playMusic(bool start);
-    bool playingMusic() {return m_playing;}
+    bool playingMusic() {return m_playing.load(std::memory_order_relaxed);}
     void reconnectMidi();
 
     float getSpeed() {return m_tempo.getSpeed();}
@@ -160,7 +175,7 @@ public:
         if (m_pianoVolume > 100 ) m_pianoVolume = 100;
         outputBoostVolume();
     }
-    static playMode_t getPlayMode() {return m_playMode;}
+    static playMode_t getPlayMode() {return m_playMode.load(std::memory_order_relaxed);}
 
     CChord getWantedChord() {return m_wantedChord;}
     void setActiveHand(whichPart_t hand);
@@ -196,7 +211,7 @@ public:
     void setPianistProgram(int program);
     void setSuppressPianistPatchUpdates(bool suppress) { m_suppressPianistPatchUpdates = suppress; }
 
-    void setEventBits(eventBits_t bits) { m_realTimeEventBits |= bits; } // don't change the other bits
+    void setEventBits(eventBits_t bits) { m_realTimeEventBits.fetch_or(bits, std::memory_order_relaxed); } // don't change the other bits
     // set to true to force the score to be redrawn
     void forceScoreRedraw(){ setEventBits( EVENT_BITS_forceFullRedraw); }
     int getBarNumber(){ return m_bar.getBarNumber();}
@@ -219,6 +234,12 @@ public:
     stopPointMode_t cfg_stopPointMode;
     rhythmTapping_t cfg_rhythmTapping;
 
+signals:
+    void tickAdvanced(qint64 msecDelta, qint64 tickDelta);
+    void barChanged(int barNumber);
+    void songEnded();
+    void tempoChanged(double effectiveBpm);
+
 protected:
     CScore* m_scoreWin;
     CSettings* m_settings;
@@ -226,7 +247,7 @@ protected:
     CQueue<CMidiEvent>* m_songEventQueue;
     CQueue<CChord>* m_wantedChordQueue;
 
-    eventBits_t m_realTimeEventBits; //used to signal real time events to the caller of task()
+    std::atomic<eventBits_t> m_realTimeEventBits; //used to signal real time events to the caller of task()
 
     void outputSavedNotes();
 
@@ -262,19 +283,38 @@ private:
     int calcBoostVolume(int chan, int volume);
 
     void addDeltaTime(qint64 ticks);
+    void dispatchScrollDelta(qint64 ticks);
+    void dispatchPlayedNoteColor(int note, CColor color, qint64 wantedDelta, qint64 pianistTiming = NOT_USED);
+    void dispatchPianistNote(whichPart_t part, const CMidiEvent &midiNote, bool good);
+    void dispatchPianistNoteOff(int note, bool wasBad);
+    void dispatchPianoClear();
+    void dispatchRhythmTapping(bool enabled);
+    bool isInWorkerThread() const;
+    void runOnWorker(const std::function<void()> &fn);
     void turnOnKeyboardLights(bool on);
     void resetTrackChannelMap();
+    void startWorker();
+    void pauseWorker();
+    void stopWorker();
+    void clearRealtimeQueues();
+    void updatePianistTrackingOn(const CMidiEvent &inputNote, bool goodSound);
+    void updatePianistTrackingOff(const CMidiEvent &inputNote, bool goodSound);
+    void resetPianistTracking();
+    void storeSavedChord(const CMidiEvent &midiNote, const CChord &chord);
+    CChord takeSavedChord(int key);
+    int pianistBadNotesDown() const { return m_pianistBadNotesDown; }
+    int pianistAllNotesDown() const { return m_pianistBadNotesDown + m_pianistGoodNotesDown; }
 
     qint64 m_playingDeltaTime;
     qint64 m_chordDeltaTime;
-    bool m_playing;
+    std::atomic<bool> m_playing;
 
     int m_transpose;     // the number of semitones to transpose the music
     followState_t m_followState;
 
     followState_t getfollowState()
     {
-        if ( m_playMode == PB_PLAY_MODE_listen )
+        if ( m_playMode.load(std::memory_order_relaxed) == PB_PLAY_MODE_listen )
             return PB_FOLLOW_searching;
         return m_followState;
     }
@@ -320,16 +360,29 @@ private:
     bool m_testWrongNoteSound;
     int m_boostVolume;
     int m_pianoVolume;
-    int m_activeChannel; // The current part that is being displayed (used for boost)
+    std::atomic<int> m_activeChannel; // The current part that is being displayed (used for boost)
     qint64 m_metronomeTickAccum;
     int m_metronomeBeatIndex;
     int m_savedMainVolume[MAX_MIDI_CHANNELS];
-    static playMode_t m_playMode;
+    static std::atomic<playMode_t> m_playMode;
     bool m_suppressPianistPatchUpdates;
     int m_skill;
     bool m_mutePianistPart;
     int m_latencyFix;     // Try to fix the latency (put the time in msec, 0 disables it)
     int m_track2ChannelLookUp[MAX_MIDI_TRACKS];
+    std::array<int, 128> m_pianistNoteStates;
+    int m_pianistGoodNotesDown;
+    int m_pianistBadNotesDown;
+    struct SavedChordEntry {
+        int pitchKey;
+        CChord chord;
+    };
+    std::array<SavedChordEntry, 20> m_savedChordLookUp;
+    QThread* m_workerThread;
+    ConductorWorker* m_worker;
+    int m_workerIntervalMs;
+    mutable QMutex m_songQueueMutex;
+    mutable QMutex m_wantedChordMutex;
 };
 
 #endif //__CONDUCTOR_H__
