@@ -414,8 +414,8 @@ bool CDraw::drawNote(CSymbol* symbol, float x, float y, CSlot* slot, CColor colo
         }
         else
         {
-            glLineWidth(2.0);
-            glBegin(GL_LINE_STRIP);
+            glLineWidth(3.8f);
+            glBegin(GL_LINE_LOOP);
                 glVertex2f(-7.0f + x,  2.0f + y); // 1
                 glVertex2f(-5.0f + x,  4.0f + y); // 2
                 glVertex2f(-1.0f + x,  6.0f + y); // 3
@@ -437,11 +437,30 @@ bool CDraw::drawNote(CSymbol* symbol, float x, float y, CSlot* slot, CColor colo
     {
         const musicalSymbol_t type = symbol->getType();
         const float stemX = 7.0f + x;   // right edge of the standard head
-        const float stemHeight = 16.0f;
+        const float stemHeight = 48.0f; // tripled height
+
+        const auto drawWholeNoteHead = [&]()
+        {
+            glLineWidth(3.8f);
+            glBegin(GL_LINE_LOOP);
+                glVertex2f(-8.5f + x,  1.5f + y);
+                glVertex2f(-6.5f + x,  4.0f + y);
+                glVertex2f(-1.5f + x,  6.0f + y);
+                glVertex2f( 4.5f + x,  6.0f + y);
+                glVertex2f( 8.0f + x,  3.5f + y);
+                glVertex2f( 8.5f + x,  1.0f + y);
+                glVertex2f( 7.5f + x, -2.0f + y);
+                glVertex2f( 4.5f + x, -4.5f + y);
+                glVertex2f( 0.0f + x, -5.5f + y);
+                glVertex2f(-5.0f + x, -5.5f + y);
+                glVertex2f(-9.0f + x, -2.5f + y);
+                glVertex2f(-9.0f + x,  0.0f + y);
+            glEnd();
+        };
 
         const auto drawStem = [&]()
         {
-            glLineWidth(1.2f);
+            glLineWidth(3.2f); // double thickness
             glBegin(GL_LINES);
                 glVertex2f(stemX, 0.0f + y);
                 glVertex2f(stemX, stemHeight + y);
@@ -450,15 +469,15 @@ bool CDraw::drawNote(CSymbol* symbol, float x, float y, CSlot* slot, CColor colo
 
         const auto drawFlags = [&](int count)
         {
-            float flagY = stemHeight - 2.0f;
+            float flagY = stemHeight - 1.0f;
             for (int i = 0; i < count; ++i)
             {
-                glLineWidth(1.2f);
+                glLineWidth(3.2f); // adapted thickness
                 glBegin(GL_LINES);
                     glVertex2f(stemX, flagY + y);
-                    glVertex2f(stemX + 5.0f, flagY - 3.0f + y);
+                    glVertex2f(stemX + 18.0f, flagY - 10.5f + y); // tripled length/height delta
                 glEnd();
-                flagY -= 3.5f;
+                flagY -= 12.0f; // tripled spacing (and fixed sign)
             }
         };
 
@@ -476,7 +495,7 @@ bool CDraw::drawNote(CSymbol* symbol, float x, float y, CSlot* slot, CColor colo
                 break;
 
             case PB_SYMBOL_semibreve:
-                drawStandardNoteHead(false);
+                drawWholeNoteHead();
                 break;
 
             case PB_SYMBOL_minim:
