@@ -30,6 +30,7 @@
 #include "Score.h"
 #include "TrackList.h"
 #include "MidiFile.h"
+#include <QTimer>
 
 CSong::CSong()
     : m_midiFile(new CMidiFile),
@@ -179,6 +180,7 @@ void CSong::setActiveHand(whichPart_t hand)
     regenerateChordQueue();
 
     m_scoreWin->setDisplayHand(hand);
+    applyTrackMuteStates();
 }
 
 void CSong::setActiveChannel(int chan)
@@ -192,6 +194,7 @@ void CSong::setActiveChannel(int chan)
             setPianistProgram(program);
     }
     regenerateChordQueue();
+    applyTrackMuteStates();
 }
 
 void  CSong::setPlayMode(playMode_t mode)
@@ -199,6 +202,56 @@ void  CSong::setPlayMode(playMode_t mode)
     regenerateChordQueue();
     this->CConductor::setPlayMode(mode);
     forceScoreRedraw();
+    applyTrackMuteStates();
+}
+
+void CSong::applyTrackMuteStates()
+{
+    if (!m_trackList)
+        return;
+
+    m_trackList->applyMuteStates();
+    QTimer::singleShot(0, this, [this]() {
+        if (m_trackList)
+            m_trackList->applyMuteStates();
+    });
+}
+
+void CSong::setPartVolume(int channel, int volume)
+{
+    if (channel < 0 || channel >= MAX_MIDI_CHANNELS)
+        return;
+    if (volume < 0)
+        volume = 0;
+    if (volume > 127)
+        volume = 127;
+    CMidiEvent event;
+    event.controlChangeEvent(0, channel, MIDI_MAIN_VOLUME, volume);
+    sendImmediateSetupEvent(event);
+    if (playingMusic())
+    {
+        event.setDeltaTime(0);
+        midiEventInsert(event);
+    }
+}
+
+void CSong::boostVolume(int boostVolume)
+{
+    this->CConductor::boostVolume(boostVolume);
+    applyTrackMuteStates();
+}
+
+void CSong::pianoVolume(int pianoVolume)
+{
+    this->CConductor::pianoVolume(pianoVolume);
+    applyTrackMuteStates();
+}
+
+void CSong::playMusic(bool start)
+{
+    this->CConductor::playMusic(start);
+    if (start)
+        applyTrackMuteStates();
 }
 
 void CSong::regenerateChordQueue()

@@ -850,11 +850,15 @@ void QtWindow::open()
 
     const auto currentSong = QFileInfo(m_settings->getCurrentSongLongFileName());
     const auto dir = currentSong.isFile() ? currentSong.path() : QDir::homePath();
-    const auto fileName = QFileDialog::getOpenFileName(this,tr("Open MIDI File"),
-                            dir, tr("MIDI Files") + " (*.mid *.MID *.midi *.MIDI *.kar *.KAR)");
-    if (!fileName.isEmpty()) {
-        m_settings->openSongFile(fileName);
-        setCurrentFile(fileName);
+    QFileDialog dialog(this, tr("Open MIDI File"), dir, tr("MIDI Files") + " (*.mid *.MID *.midi *.MIDI *.kar *.KAR)");
+    dialog.setFileMode(QFileDialog::ExistingFile);
+    dialog.setOption(QFileDialog::DontUseNativeDialog, true);
+    if (dialog.exec() == QDialog::Accepted) {
+        const QString fileName = dialog.selectedFiles().value(0);
+        if (!fileName.isEmpty()) {
+            m_settings->openSongFile(fileName);
+            setCurrentFile(fileName);
+        }
     }
     m_song->flushMidiInput();
     m_glWidget->startTimerEvent();

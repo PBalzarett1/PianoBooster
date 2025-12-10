@@ -58,6 +58,11 @@ public:
 
     void rewind();
 
+    void setPartVolume(int channel, int volume);
+    void boostVolume(int boostVolume);
+    void pianoVolume(int pianoVolume);
+    void playMusic(bool start);
+
     void playFromStartBar()
     {
         rewind();
@@ -81,6 +86,7 @@ private:
     void insertChordIfFound(const CMidiEvent &event);
     bool seekToPlayFromBar();
     int computeMaxSongBar();
+    void applyTrackMuteStates();
 
     CMidiFile * m_midiFile;
     CFindChord m_findChord;

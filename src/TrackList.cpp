@@ -47,6 +47,8 @@ void CTrackList::reset(int numberOfTracks)
     m_trackNames = QVector<QString>(numberOfTracks);
     for (int chan = 0; chan < MAX_MIDI_CHANNELS; ++chan)
         m_channelTrackIndex[chan] = -1;
+    for (int chan = 0; chan < MAX_MIDI_CHANNELS; ++chan)
+        m_channelVolume[chan] = 100;
     for (int chan = 0; chan < MAX_MIDI_CHANNELS; ++chan) {
         std::fill_n(m_noteFrequency[chan], MAX_MIDI_NOTES, 0);
         m_midiChannels.append(AnalyseItem(numberOfTracks));
@@ -83,6 +85,9 @@ void CTrackList::examineMidiEvent(CMidiEvent event)
 
         if (event.type() == MIDI_PROGRAM_CHANGE) {
             m_midiChannels[chan].addPatch(event.programme());
+        }
+        if (event.type() == MIDI_CONTROL_CHANGE && event.data1() == MIDI_MAIN_VOLUME) {
+            m_channelVolume[chan] = event.data2();
         }
     }
 }
@@ -228,6 +233,10 @@ int CTrackList::findFreeChannel(int startChannel)
 
 void CTrackList::refresh()
 {
+    QHash<int, CTrackListItem> existingParts;
+    for (const auto& part : m_partsList)
+        existingParts.insert(part.midiChannel(), part);
+
     m_partsList.clear();
 
     for (int chan = 0; chan < MAX_MIDI_CHANNELS; ++chan)
@@ -236,7 +245,17 @@ void CTrackList::refresh()
         {
             int trackIdx = channelTrackIndex(chan);
             QString name = trackName(trackIdx);
-            m_partsList.append(CTrackListItem(chan, trackIdx, name));
+            CTrackListItem item(chan, trackIdx, name);
+            item.setCurrentVolume(m_channelVolume[chan]);
+            const auto it = existingParts.constFind(chan);
+            if (it != existingParts.constEnd())
+            {
+                const CTrackListItem& previousItem = it.value();
+                item.setMuted(previousItem.isMuted());
+                item.setCurrentVolume(previousItem.currentVolume());
+                item.setLastNonZeroVolume(previousItem.lastNonZeroVolume());
+            }
+            m_partsList.append(item);
         }
     }
 
@@ -294,6 +313,7 @@ void CTrackList::refresh()
         const AnalyseItem& item  = m_midiChannels[chan];
         CNote::setRightHandTrack(chan, item.rightHandTrack());
     }
+    applyMuteStates();
 }
 
 int CTrackList::getActiveItemIndex()
@@ -579,4 +599,52 @@ int CTrackList::channelTrackIndex(int channel) const
     if (channel < 0 || channel >= MAX_MIDI_CHANNELS)
         return -1;
     return m_channelTrackIndex[channel];
+}
+
+void CTrackList::applyPartVolume(const CTrackListItem& item)
+{
+    if (!m_song)
+        return;
+    int volume = item.isMuted() ? 0 : item.currentVolume();
+    m_song->setPartVolume(item.midiChannel(), volume);
+}
+
+void CTrackList::setMuted(int index, bool muted)
+{
+    if (index < 0 || index >= m_partsList.size())
+        return;
+    CTrackListItem& item = m_partsList[index];
+    item.setMuted(muted);
+    if (muted)
+        item.setCurrentVolume(0);
+    else
+        item.setCurrentVolume(item.lastNonZeroVolume());
+    if (!muted)
+        m_channelVolume[item.midiChannel()] = item.currentVolume();
+    applyPartVolume(item);
+}
+
+bool CTrackList::isMuted(int index) const
+{
+    if (index < 0 || index >= m_partsList.size())
+        return false;
+    return m_partsList.at(index).isMuted();
+}
+
+void CTrackList::setPartVolume(int index, int volume)
+{
+    if (index < 0 || index >= m_partsList.size())
+        return;
+    CTrackListItem& item = m_partsList[index];
+    item.setCurrentVolume(volume);
+    m_channelVolume[item.midiChannel()] = item.currentVolume();
+    applyPartVolume(item);
+}
+
+void CTrackList::applyMuteStates()
+{
+    if (!m_song)
+        return;
+    for (const auto& item : m_partsList)
+        applyPartVolume(item);
 }

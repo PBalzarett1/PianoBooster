@@ -34,6 +34,7 @@
 #include <QList>
 #include <QObject>
 #include <QSharedPointer>
+#include <QHash>
 #include <QVector>
 
 #include <cstring>
@@ -154,11 +155,34 @@ public:
     int midiChannel() const {return m_midiChannel;}
     int trackIndex() const {return m_trackIndex;}
     QString trackName() const {return m_trackName;}
+    bool isMuted() const { return m_isMuted; }
+    void setMuted(bool muted) { m_isMuted = muted; }
+
+    int currentVolume() const { return m_currentVolume; }
+    void setCurrentVolume(int volume)
+    {
+        m_currentVolume = volume;
+        if (volume > 0)
+            m_lastNonZeroVolume = volume;
+    }
+
+    int lastNonZeroVolume() const
+    {
+        return (m_lastNonZeroVolume > 0) ? m_lastNonZeroVolume : 100;
+    }
+    void setLastNonZeroVolume(int volume)
+    {
+        if (volume > 0)
+            m_lastNonZeroVolume = volume;
+    }
 
 private:
     int m_midiChannel;
     int m_trackIndex;
     QString m_trackName;
+    bool m_isMuted = false;
+    int m_currentVolume = 100;
+    int m_lastNonZeroVolume = 100;
 };
 
 class CTrackList : public QObject
@@ -205,6 +229,10 @@ public:
     void setTrackName(int trackIndex, const QString &name);
     QString trackName(int trackIndex) const;
     int channelTrackIndex(int channel) const;
+    void setMuted(int index, bool muted);
+    bool isMuted(int index) const;
+    void setPartVolume(int index, int volume);
+    void applyMuteStates();
 
     double averageNotePitch(int chan) {
         int totalNoteCount = 0;
@@ -220,6 +248,7 @@ public:
 
 private:
     QString getChannelProgramName(int chan) const;
+    void applyPartVolume(const CTrackListItem& item);
 
     CSong* m_song;
     CSettings* m_settings;
@@ -228,6 +257,7 @@ private:
     int m_noteFrequency[MAX_MIDI_CHANNELS][MAX_MIDI_NOTES];
     QVector<QString> m_trackNames;
     int m_channelTrackIndex[MAX_MIDI_CHANNELS];
+    int m_channelVolume[MAX_MIDI_CHANNELS];
 
 };
 

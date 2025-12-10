@@ -95,6 +95,7 @@ private slots:
     void on_rightHandRadio_toggled (bool checked);
     void on_bothHandsRadio_toggled (bool checked);
     void on_leftHandRadio_toggled (bool checked);
+    void on_trackListWidget_itemChanged(QListWidgetItem* item);
     void on_repeatSong_released();
 
     void on_trackListWidget_currentRowChanged(int currentRow) {
@@ -204,6 +205,7 @@ private:
     GuiTopBar* m_topBar;
     CSettings* m_settings;
     QWidget *m_parent;
+    bool m_updatingTrackList = false;
 };
 
 #endif //__GUISIDEPANEL_H__

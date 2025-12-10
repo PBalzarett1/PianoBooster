@@ -62,8 +62,7 @@ public:
     {
         if (!space())
         {
-            assert(false);
-            return 0;
+            return nullptr; // queue is full, drop push request
         }
         TYPE* itemPtr = &m_buffer[m_head];
         m_buffer[m_head] = c;

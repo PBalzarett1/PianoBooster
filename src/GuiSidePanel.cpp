@@ -115,14 +115,30 @@ void GuiSidePanel::init(CSong* songObj, CTrackList* trackList, GuiTopBar* topBar
 void GuiSidePanel::refresh() {
     if (m_trackList)
     {
+        m_updatingTrackList = true;
         m_trackList->refresh();
         trackListWidget->clear();
-        trackListWidget->addItems(m_trackList->getAllChannelProgramNames());
+        const QStringList items = m_trackList->getAllChannelProgramNames();
+        for (int i = 0; i < items.size(); ++i)
+        {
+            auto *listItem = new QListWidgetItem(items.at(i), trackListWidget);
+            listItem->setFlags(listItem->flags() | Qt::ItemIsUserCheckable | Qt::ItemIsEnabled | Qt::ItemIsSelectable);
+            listItem->setCheckState(m_trackList->isMuted(i) ? Qt::Unchecked : Qt::Checked);
+            m_trackList->changeListWidgetItemView(i, listItem);
+        }
+        m_updatingTrackList = false;
         trackListWidget->setCurrentRow(m_trackList->getActiveItemIndex());
-        for (int i = 0; i < trackListWidget->count(); i++)
-            m_trackList->changeListWidgetItemView(i, trackListWidget->item(i));
     }
     autoSetMuteYourPart();
+}
+
+void GuiSidePanel::on_trackListWidget_itemChanged(QListWidgetItem* item)
+{
+    if (m_updatingTrackList || !m_trackList || !item)
+        return;
+    int row = trackListWidget->row(item);
+    const bool muted = (item->checkState() == Qt::Unchecked);
+    m_trackList->setMuted(row, muted);
 }
 
 void GuiSidePanel::loadBookList()
