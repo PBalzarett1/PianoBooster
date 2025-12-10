@@ -80,6 +80,8 @@ private:
     bool eventFilter(QObject *obj, QEvent *event);
     void reloadKeyCombo(bool major);
     void syncTempoWidgets();
+    void syncStartBarWidget();
+    void applyStartBarInput();
 
     CSong* m_song;
     CSettings* m_settings;
@@ -89,6 +91,7 @@ private:
 
     bool m_atTheEndOfTheSong;
     bool m_updatingTempoUi;
+    bool m_updatingStartBarUi;
 };
 
 #endif //__GUITOPBAR_H__

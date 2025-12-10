@@ -215,7 +215,7 @@ public:
     // set to true to force the score to be redrawn
     void forceScoreRedraw(){ setEventBits( EVENT_BITS_forceFullRedraw); }
     int getBarNumber(){ return m_bar.getBarNumber();}
-
+    double playFromBarValue() const { return m_bar.getPlayFromBar(); }
     double getCurrentBarPos(){ return m_bar.getCurrentBarPos();}
 
     void setPlayFromBar(double bar){ m_bar.setPlayFromBar(bar);}

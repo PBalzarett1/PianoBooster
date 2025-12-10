@@ -37,7 +37,8 @@ CSong::CSong()
       m_reachedMidiEof(false),
       m_fakeChord(),
       m_trackList(new CTrackList),
-      m_songTitle()
+      m_songTitle(),
+      m_maxSongBar(0)
 {
     CStavePos::setKeySignature(NOT_USED, 0);
     reset();
@@ -86,6 +87,7 @@ void CSong::loadSong(const QString & filename)
     ppLogInfo("Opening song %s",  fn.toLocal8Bit().data());
     transpose(0);
     midiFileInfo();
+    m_maxSongBar = computeMaxSongBar();
     m_midiFile->setLogLevel(99);
     playMusic(false);
     rewind();
@@ -95,6 +97,14 @@ void CSong::loadSong(const QString & filename)
     if (!m_midiFile->getSongTitle().isEmpty())
         m_songTitle = m_midiFile->getSongTitle();
 
+}
+
+void CSong::setPlayFromBar(double bar)
+{
+    double clampedBar = bar;
+    if (m_maxSongBar > 0 && bar > m_maxSongBar)
+        clampedBar = static_cast<double>(m_maxSongBar);
+    this->CConductor::setPlayFromBar(clampedBar);
 }
 
 // read the file ahead to collect info about the song first
@@ -123,8 +133,34 @@ void CSong::midiFileInfo()
     }
 }
 
+int CSong::computeMaxSongBar()
+{
+    if (!m_midiFile)
+        return 0;
+
+    m_midiFile->rewind();
+    CBar barProbe;
+    barProbe.setTimeSig(0, 0);
+
+    while (true)
+    {
+        CMidiEvent event = m_midiFile->readMidiEvent();
+        if (event.type() == MIDI_PB_timeSignature)
+            barProbe.setTimeSig(event.data1(), event.data2());
+
+        barProbe.addDeltaTime(static_cast<qint64>(event.deltaTime()) * SPEED_ADJUST_FACTOR);
+
+        if (event.type() == MIDI_PB_EOF)
+            break;
+    }
+
+    return barProbe.getBarNumber();
+}
+
 void CSong::rewind()
 {
+    if (m_maxSongBar == 0)
+        m_maxSongBar = computeMaxSongBar();
     m_midiFile->rewind();
     this->CConductor::rewind();
     m_scoreWin->reset();

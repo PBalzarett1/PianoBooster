@@ -38,6 +38,7 @@ GuiTopBar::GuiTopBar(QWidget *parent, CSettings* settings)
 
     m_atTheEndOfTheSong = false;
     m_updatingTempoUi = false;
+    m_updatingStartBarUi = false;
     m_song = nullptr;
     setupUi(this);
 
@@ -63,6 +64,7 @@ void GuiTopBar::init(CSong* songObj)
     m_song = songObj;
     reloadKeyCombo(true);
     syncTempoWidgets();
+    syncStartBarWidget();
 }
 
 void GuiTopBar::refresh(bool reset)
@@ -219,6 +221,8 @@ void GuiTopBar::on_playButton_clicked(bool clicked)
     Q_UNUSED(clicked)
     if (!m_song) return;
 
+    applyStartBarInput();
+
     if (m_atTheEndOfTheSong)
         m_song->rewind();
     m_atTheEndOfTheSong = false;
@@ -226,6 +230,7 @@ void GuiTopBar::on_playButton_clicked(bool clicked)
     bool start = !m_song->playingMusic();
     m_song->playMusic(start);
     setPlayButtonState(start);
+    syncStartBarWidget();
 }
 
 void GuiTopBar::on_playFromStartButton_clicked(bool clicked)
@@ -233,9 +238,12 @@ void GuiTopBar::on_playFromStartButton_clicked(bool clicked)
     Q_UNUSED(clicked)
     if (!m_song) return;
 
+    applyStartBarInput();
+
     m_atTheEndOfTheSong = false;
     m_song->playFromStartBar();
     setPlayButtonState(true);
+    syncStartBarWidget();
 }
 
 void GuiTopBar::on_speedSpin_valueChanged(int speed)
@@ -251,10 +259,21 @@ void GuiTopBar::on_speedSpin_valueChanged(int speed)
 void GuiTopBar::on_startBarSpin_valueChanged(double bar)
 {
     if (!m_song) return;
+    if (m_updatingStartBarUi)
+        return;
 
     stopMuiscPlaying();
 
     m_song->setPlayFromBar( bar);
+
+    // Reflect any clamping back into the UI without recursion.
+    const double clamped = m_song->getPlayFromBar();
+    if (clamped != bar)
+    {
+        m_updatingStartBarUi = true;
+        startBarSpin->setValue(clamped);
+        m_updatingStartBarUi = false;
+    }
 }
 
 void GuiTopBar::on_tempoSpin_valueChanged(int bpm)
@@ -319,6 +338,30 @@ bool GuiTopBar::eventFilter(QObject *obj, QEvent *event)
         // it's not a key event, lets do standard event processing
         return QObject::eventFilter(obj, event);
     }
+}
+
+void GuiTopBar::syncStartBarWidget()
+{
+    if (!m_song || m_updatingStartBarUi)
+        return;
+
+    const double current = m_song->getPlayFromBar();
+    if (!qFuzzyCompare(startBarSpin->value(), current))
+    {
+        m_updatingStartBarUi = true;
+        startBarSpin->setValue(current);
+        m_updatingStartBarUi = false;
+    }
+}
+
+void GuiTopBar::applyStartBarInput()
+{
+    if (!startBarSpin || !m_song)
+        return;
+    startBarSpin->interpretText();
+    // Force clamp application even if value did not emit changed.
+    m_song->setPlayFromBar(startBarSpin->value());
+    syncStartBarWidget();
 }
 
 void GuiTopBar::syncTempoWidgets()

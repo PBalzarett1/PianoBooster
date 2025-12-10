@@ -63,6 +63,8 @@ public:
         rewind();
         playMusic(true);
     }
+    void setPlayFromBar(double bar);
+    double getPlayFromBar() const { return playFromBarValue(); }
 
     void setActiveHand(whichPart_t hand);
     whichPart_t getActiveHand(){return CNote::getActiveHand();}
@@ -78,6 +80,7 @@ private:
     void midiFileInfo();
     void insertChordIfFound(const CMidiEvent &event);
     bool seekToPlayFromBar();
+    int computeMaxSongBar();
 
     CMidiFile * m_midiFile;
     CFindChord m_findChord;
@@ -85,6 +88,7 @@ private:
     CChord m_fakeChord;  // the chord played with the tab key
     CTrackList* m_trackList;
     QString m_songTitle;
+    int m_maxSongBar;
 };
 
 #endif  // __SONG_H__
