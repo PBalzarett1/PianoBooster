@@ -186,54 +186,151 @@ void CSong::refreshScroll()
     forceScoreRedraw();
 }
 
+bool CSong::seekToPlayFromBar()
+{
+    const int targetBar = playFromBarTarget();
+    const bool resumePlaying = playingMusic();
+
+    rewind();
+
+    bool reachedTarget = (targetBar == 0);
+    auto applySkippedEventState = [this](const CMidiEvent &event) {
+        const int type = event.type();
+        if (type == MIDI_PB_tempo)
+        {
+            applyTempoEvent(event);
+            return;
+        }
+        if (type == MIDI_PB_timeSignature)
+        {
+            applyTimeSignatureEvent(event);
+            return;
+        }
+
+        switch (type)
+        {
+        case MIDI_PROGRAM_CHANGE:
+        case MIDI_CONTROL_CHANGE:
+        case MIDI_PITCH_BEND:
+        case MIDI_CHANNEL_PRESSURE:
+        case MIDI_NOTE_PRESSURE:
+            sendImmediateSetupEvent(event);
+            break;
+        default:
+            break;
+        }
+    };
+
+    while (!m_reachedMidiEof)
+    {
+        if (midiEventSpace() <= 10 || chordEventSpace() <= 10)
+            break;
+
+        if (m_scoreWin->midiEventSpace() <= 100)
+            break;
+
+        CMidiEvent event = m_midiFile->readMidiEvent();
+        qint64 deltaTicks = static_cast<qint64>(event.deltaTime()) * SPEED_ADJUST_FACTOR;
+
+        if (!reachedTarget)
+        {
+            qint64 leftover = deltaTicks;
+            while (leftover > 0 && currentBarNumberRaw() < targetBar)
+            {
+                const qint64 toNextBar = ticksToNextBarStart();
+                if (toNextBar <= 0)
+                    break;
+
+                if (leftover < toNextBar)
+                {
+                    advanceBarPosition(leftover);
+                    leftover = 0;
+                    break;
+                }
+
+                advanceBarPosition(toNextBar);
+                leftover -= toNextBar;
+            }
+
+            if (currentBarNumberRaw() < targetBar)
+            {
+                applySkippedEventState(event);
+                continue;
+            }
+
+            reachedTarget = true;
+            deltaTicks = leftover;
+            jumpToBarNumber();
+        }
+
+        const int adjustedDelta = static_cast<int>(deltaTicks / SPEED_ADJUST_FACTOR);
+        event.setDeltaTime(adjustedDelta);
+
+        insertChordIfFound(event);
+        m_scoreWin->midiEventInsert(event);
+        midiEventInsert(event);
+
+        if (event.type() == MIDI_PB_EOF)
+        {
+            m_reachedMidiEof = true;
+            break;
+        }
+    }
+
+    if (!reachedTarget)
+    {
+        const int lastBar = currentBarNumberRaw();
+        if (lastBar < targetBar)
+            setPlayFromBar(lastBar);
+        jumpToBarNumber();
+    }
+
+    const eventBits_t barBits = readBarEventBits();
+    setEventBits(barBits);
+    if (barBits & EVENT_BITS_newBarNumber)
+        emit barChanged(currentBarNumberRaw());
+
+    if (resumePlaying)
+        playMusic(true);
+
+    return reachedTarget;
+}
+
 eventBits_t CSong::task(qint64 ticks)
 {
     Q_UNUSED(ticks);
+    if (seekingBarNumber() && playingMusic())
+        seekToPlayFromBar();
+
     while (true)
     {
         if (m_reachedMidiEof == true)
-            goto exitTask;
-
-        while (true)
-        {
-            // Check that there is space
-            if (midiEventSpace() <= 10 || chordEventSpace() <= 10)
-                break;
-
-            // and that the Score has space also
-            if (m_scoreWin->midiEventSpace() <= 100)
-                break;
-
-            // Read the next events
-            CMidiEvent event = m_midiFile->readMidiEvent();
-
-            //ppLogTrace("Song event delta %d type 0x%x chan %d Note %d", event.deltaTime(), event.type(), event.channel(), event.note());
-
-            insertChordIfFound(event);
-
-            // send the events to the other end
-            m_scoreWin->midiEventInsert(event);
-
-            // send the events to the other end
-            midiEventInsert(event);
-
-            if (event.type() == MIDI_PB_EOF)
-            {
-                m_reachedMidiEof = true;
-                break;
-            }
-        }
-
-        // carry on with the data until we reach the bar we want
-        if (seekingBarNumber() && m_reachedMidiEof == false && playingMusic())
-        {
-            m_scoreWin->drawScrollingSymbols(false); // don't display any thing just  remove from the queue
-        }
-        else
             break;
+
+        // Check that there is space
+        if (midiEventSpace() <= 10 || chordEventSpace() <= 10)
+            break;
+
+        // and that the Score has space also
+        if (m_scoreWin->midiEventSpace() <= 100)
+            break;
+
+        // Read the next events
+        CMidiEvent event = m_midiFile->readMidiEvent();
+
+        insertChordIfFound(event);
+
+        m_scoreWin->midiEventInsert(event);
+
+        midiEventInsert(event);
+
+        if (event.type() == MIDI_PB_EOF)
+        {
+            m_reachedMidiEof = true;
+            break;
+        }
     }
 
-exitTask:
     return takePendingEventBits();
 }
 

@@ -251,6 +251,18 @@ protected:
 
     void outputSavedNotes();
 
+    void applyTempoEvent(const CMidiEvent &event);
+    void applyTimeSignatureEvent(const CMidiEvent &event);
+    void sendImmediateSetupEvent(CMidiEvent event);
+
+    // Helpers for derived classes to manage bar seeking without exposing CBar.
+    int playFromBarTarget() const { return m_bar.getPlayFromBar(); }
+    int currentBarNumberRaw() const { return m_bar.getBarNumber(); }
+    qint64 ticksToNextBarStart() const { return m_bar.ticksToNextBarStart(); }
+    void advanceBarPosition(qint64 ticks) { m_bar.advancePosition(ticks); }
+    qint64 jumpToBarNumber() { return m_bar.goToBarNumer(); }
+    eventBits_t readBarEventBits() { return m_bar.readEventBits(); }
+
     void resetWantedChord();
     void playWantedChord (CChord chord, CMidiEvent inputNote);
 

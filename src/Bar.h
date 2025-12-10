@@ -111,7 +111,9 @@ public:
     qint64 addDeltaTime(qint64 ticks);
 
     //
-    int getBarNumber(){ return m_barCounter;}
+    int getBarNumber() const { return m_barCounter;}
+
+    int getPlayFromBar() const { return clampTargetBar(m_playFromBar); }
 
     double getCurrentBarPos()
     {
@@ -129,6 +131,8 @@ public:
     }
 
     qint64 goToBarNumer();
+    qint64 ticksToNextBarStart() const;
+    void advancePosition(qint64 ticks);
 
 private:
     void checkGotoBar();

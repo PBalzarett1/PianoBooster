@@ -349,6 +349,24 @@ void CConductor::clearRealtimeQueues()
     m_savedNoteOffQueue->clear();
 }
 
+void CConductor::applyTempoEvent(const CMidiEvent &event)
+{
+    m_tempo.setMidiTempo(event.data1());
+    m_leadLagAdjust = m_tempo.mSecToTicks( -getLatencyFix() );
+    emit tempoChanged(m_tempo.getEffectiveBpm());
+}
+
+void CConductor::applyTimeSignatureEvent(const CMidiEvent &event)
+{
+    m_bar.setTimeSig(event.data1(), event.data2());
+    ppLogDebug("MIDI Time Signature %d/%d", event.data1(), event.data2());
+}
+
+void CConductor::sendImmediateSetupEvent(CMidiEvent event)
+{
+    playTrackEvent(event);
+}
+
 void CConductor::resetPianistTracking()
 {
     m_pianistNoteStates.fill(0);
@@ -1463,14 +1481,11 @@ void CConductor::realTimeEngine(qint64 mSecTicks)
         return;
 
     if (seekingBarNumber())
-        ticks = 0;
+        return;
 
     m_tempo.adjustTempo(&ticks);
 
     ticks = m_bar.addDeltaTime(ticks);
-
-    if (seekingBarNumber())
-        ticks = m_bar.goToBarNumer();
 
     const eventBits_t barBits = m_bar.readEventBits();
     setEventBits(barBits);
@@ -1535,15 +1550,11 @@ void CConductor::realTimeEngine(qint64 mSecTicks)
 
         if (type == MIDI_PB_tempo)
         {
-            m_tempo.setMidiTempo(m_nextMidiEvent.data1());
-            m_leadLagAdjust = m_tempo.mSecToTicks( -getLatencyFix() );
-            emit tempoChanged(m_tempo.getEffectiveBpm());
+            applyTempoEvent(m_nextMidiEvent);
         }
         else if (type == MIDI_PB_timeSignature)
         {
-            m_bar.setTimeSig(m_nextMidiEvent.data1(), m_nextMidiEvent.data2());
-            ppLogDebug("MIDI Time Signature %d/%d", m_nextMidiEvent.data1(),m_nextMidiEvent.data2());
-
+            applyTimeSignatureEvent(m_nextMidiEvent);
         }
         else if ( type != MIDI_NONE )   // this marks the end of the piece of music
         {

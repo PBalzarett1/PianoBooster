@@ -87,22 +87,42 @@ qint64 CBar::goToBarNumer()
     if (m_beatLength <= 0 || m_barLength <= 0 || m_currentTimeSigTop <= 0 || m_currentTimeSigBottom <= 0)
         return 0;
 
-    const int currentBar = m_barCounter;
-    const int targetBar = clampTargetBar(m_playFromBar);
-    int diffBars = targetBar - currentBar;
-    if (diffBars < 0)
-        diffBars = 0;
-
-    const qint64 ticks = static_cast<qint64>(diffBars) * m_barLength * SPEED_ADJUST_FACTOR;
-
-    m_barCounter = targetBar;
+    m_barCounter = clampTargetBar(m_playFromBar);
     m_beatCounter = 0;
     m_deltaTime = 0;
 
     m_seekingBarNumber = false;
     m_flushTicks = true;
     m_eventBits |= EVENT_BITS_newBarNumber;
-    return ticks;
+    return 0;
+}
+
+qint64 CBar::ticksToNextBarStart() const
+{
+    if (m_currentTimeSigTop <= 0 || m_beatLength <= 0)
+        return 0;
+
+    const qint64 beatTicks = m_beatLength * SPEED_ADJUST_FACTOR;
+    const int beatsRemaining = m_currentTimeSigTop - m_beatCounter;
+    return beatTicks * beatsRemaining - m_deltaTime;
+}
+
+void CBar::advancePosition(qint64 ticks)
+{
+    if (ticks <= 0 || m_beatLength <= 0 || m_currentTimeSigTop <= 0)
+        return;
+
+    m_deltaTime += ticks;
+    while (m_deltaTime >= m_beatLength * SPEED_ADJUST_FACTOR)
+    {
+        m_deltaTime -= m_beatLength * SPEED_ADJUST_FACTOR;
+        m_beatCounter++;
+        if (m_beatCounter >= m_currentTimeSigTop)
+        {
+            m_barCounter++;
+            m_beatCounter = 0;
+        }
+    }
 }
 
 void CBar::checkGotoBar()

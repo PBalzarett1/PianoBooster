@@ -77,6 +77,7 @@ public:
 private:
     void midiFileInfo();
     void insertChordIfFound(const CMidiEvent &event);
+    bool seekToPlayFromBar();
 
     CMidiFile * m_midiFile;
     CFindChord m_findChord;
