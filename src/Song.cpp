@@ -188,12 +188,37 @@ void CSong::refreshScroll()
 
 bool CSong::seekToPlayFromBar()
 {
-    const int targetBar = playFromBarTarget();
     const bool resumePlaying = playingMusic();
+    int desiredBar = playFromBarTarget();
+
+    // First find the furthest reachable bar, then clamp the desired start.
+    {
+        m_midiFile->rewind();
+        CBar barProbe;
+        int top = 0, bottom = 0;
+        getTimeSig(&top, &bottom);
+        if (top > 0 && bottom > 0)
+            barProbe.setTimeSig(top, bottom);
+        while (true)
+        {
+            CMidiEvent event = m_midiFile->readMidiEvent();
+            if (event.type() == MIDI_PB_timeSignature)
+                barProbe.setTimeSig(event.data1(), event.data2());
+            barProbe.addDeltaTime(static_cast<qint64>(event.deltaTime()) * SPEED_ADJUST_FACTOR);
+            if (event.type() == MIDI_PB_EOF)
+                break;
+        }
+        const int maxReachableBar = barProbe.getBarNumber();
+        if (desiredBar > maxReachableBar)
+        {
+            desiredBar = maxReachableBar;
+            setPlayFromBar(desiredBar);
+        }
+    }
 
     rewind();
 
-    bool reachedTarget = (targetBar == 0);
+    bool reachedTarget = (desiredBar == 0);
     auto applySkippedEventState = [this](const CMidiEvent &event) {
         const int type = event.type();
         if (type == MIDI_PB_tempo)
@@ -235,7 +260,7 @@ bool CSong::seekToPlayFromBar()
         if (!reachedTarget)
         {
             qint64 leftover = deltaTicks;
-            while (leftover > 0 && currentBarNumberRaw() < targetBar)
+            while (leftover > 0 && currentBarNumberRaw() < desiredBar)
             {
                 const qint64 toNextBar = ticksToNextBarStart();
                 if (toNextBar <= 0)
@@ -252,7 +277,7 @@ bool CSong::seekToPlayFromBar()
                 leftover -= toNextBar;
             }
 
-            if (currentBarNumberRaw() < targetBar)
+            if (currentBarNumberRaw() < desiredBar)
             {
                 applySkippedEventState(event);
                 continue;
@@ -279,10 +304,8 @@ bool CSong::seekToPlayFromBar()
 
     if (!reachedTarget)
     {
-        const int lastBar = currentBarNumberRaw();
-        if (lastBar < targetBar)
-            setPlayFromBar(lastBar);
         jumpToBarNumber();
+        reachedTarget = true;
     }
 
     const eventBits_t barBits = readBarEventBits();
