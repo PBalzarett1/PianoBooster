@@ -82,6 +82,7 @@ private:
     void syncTempoWidgets();
     void syncStartBarWidget();
     void applyStartBarInput();
+    void showStartBarClamped(double requested, double clamped);
 
     CSong* m_song;
     CSettings* m_settings;

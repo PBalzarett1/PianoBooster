@@ -270,6 +270,7 @@ void GuiTopBar::on_startBarSpin_valueChanged(double bar)
     const double clamped = m_song->getPlayFromBar();
     if (clamped != bar)
     {
+        showStartBarClamped(bar, clamped);
         m_updatingStartBarUi = true;
         startBarSpin->setValue(clamped);
         m_updatingStartBarUi = false;
@@ -354,14 +355,25 @@ void GuiTopBar::syncStartBarWidget()
     }
 }
 
+void GuiTopBar::showStartBarClamped(double requested, double clamped)
+{
+    if (requested <= clamped)
+        return;
+    const QString msg = tr("Clamped to bar %1").arg(clamped);
+    const QPoint pos = startBarSpin->mapToGlobal(QPoint(startBarSpin->width()/2, startBarSpin->height()));
+    QToolTip::showText(pos, msg, startBarSpin, startBarSpin->rect(), 1500);
+}
+
 void GuiTopBar::applyStartBarInput()
 {
     if (!startBarSpin || !m_song)
         return;
     startBarSpin->interpretText();
     // Force clamp application even if value did not emit changed.
-    m_song->setPlayFromBar(startBarSpin->value());
+    const double requested = startBarSpin->value();
+    m_song->setPlayFromBar(requested);
     syncStartBarWidget();
+    showStartBarClamped(requested, m_song->getPlayFromBar());
 }
 
 void GuiTopBar::syncTempoWidgets()
